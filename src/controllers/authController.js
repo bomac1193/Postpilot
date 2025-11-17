@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const { generateToken } = require('../middleware/auth');
 const axios = require('axios');
+const passport = require('../config/passport');
 
 // Register new user
 exports.register = async (req, res) => {
@@ -272,4 +273,31 @@ exports.getSocialStatus = async (req, res) => {
     console.error('Get social status error:', error);
     res.status(500).json({ error: 'Failed to get social status' });
   }
+};
+
+// Google OAuth - Initiate (handled by passport)
+exports.googleAuth = passport.authenticate('google', {
+  scope: ['profile', 'email'],
+  session: false
+});
+
+// Google OAuth - Callback
+exports.googleCallback = (req, res, next) => {
+  passport.authenticate('google', { session: false }, async (err, user, info) => {
+    try {
+      if (err || !user) {
+        console.error('Google auth error:', err || 'No user returned');
+        return res.redirect('/?google=error');
+      }
+
+      // Generate JWT token
+      const token = generateToken(user._id);
+
+      // Redirect to frontend with token
+      res.redirect(`/?google=success&token=${token}`);
+    } catch (error) {
+      console.error('Google callback error:', error);
+      res.redirect('/?google=error');
+    }
+  })(req, res, next);
 };

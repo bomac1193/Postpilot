@@ -9,6 +9,10 @@ router.post('/login', authController.login);
 router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.getCurrentUser);
 
+// Google OAuth
+router.get('/google', authController.googleAuth);
+router.get('/google/callback', authController.googleCallback);
+
 // Instagram OAuth
 router.get('/instagram', authController.instagramAuth);
 router.get('/instagram/callback', authController.instagramCallback);

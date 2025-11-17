@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PostPilot - AI-Powered Content Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -12,8 +15,11 @@
     <div class="container">
       <div class="header-content">
         <div class="logo">
-          <span class="logo-icon">✈️</span>
-          <h1>PostPilot</h1>
+          <span class="logo-icon">✧</span>
+          <div class="logo-text">
+            <h1>PostPilot</h1>
+            <p class="logo-subtitle">Social Alchemy Studio</p>
+          </div>
         </div>
         <nav class="nav" id="mainNav">
           <button class="nav-btn" data-view="dashboard">Dashboard</button>
@@ -30,6 +36,7 @@
           </div>
         </div>
       </div>
+      <p class="header-tagline">Where disciplined craft meets a touch of magic</p>
     </div>
   </header>
 
@@ -332,6 +339,66 @@
     </div>
   </div>
 
+  <!-- Social Accounts Modal -->
+  <div class="modal" id="socialAccountsModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Connect Social Accounts</h3>
+        <button class="modal-close" id="closeSocialModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 1.5rem;">
+          Connect your Instagram and TikTok accounts to enable direct posting and scheduling.
+        </p>
+
+        <!-- Instagram Connection -->
+        <div class="social-account-card">
+          <div class="social-account-header">
+            <div class="social-account-icon instagram-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+              </svg>
+            </div>
+            <div class="social-account-info">
+              <h4>Instagram</h4>
+              <p class="status-text" id="instagramStatus">Not connected</p>
+            </div>
+          </div>
+          <div class="social-account-actions">
+            <button class="btn btn-primary" id="connectInstagramBtn">Connect</button>
+            <button class="btn btn-danger" id="disconnectInstagramBtn" style="display: none;">Disconnect</button>
+          </div>
+        </div>
+
+        <!-- TikTok Connection -->
+        <div class="social-account-card">
+          <div class="social-account-header">
+            <div class="social-account-icon tiktok-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+              </svg>
+            </div>
+            <div class="social-account-info">
+              <h4>TikTok</h4>
+              <p class="status-text" id="tiktokStatus">Not connected</p>
+            </div>
+          </div>
+          <div class="social-account-actions">
+            <button class="btn btn-primary" id="connectTikTokBtn">Connect</button>
+            <button class="btn btn-danger" id="disconnectTikTokBtn" style="display: none;">Disconnect</button>
+          </div>
+        </div>
+
+        <div class="social-help" style="margin-top: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem;">
+          <p style="font-size: 0.875rem; color: #6b7280; margin: 0;">
+            <strong>Note:</strong> You'll need to set up API credentials in your .env file first.
+            Check the SETUP_INSTRUCTIONS.md file for detailed setup steps.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Auth Modal -->
   <div class="modal" id="authModal">
     <div class="modal-content">
@@ -356,6 +423,23 @@
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" id="authSubmitBtn">Login</button>
           </div>
+
+          <div class="auth-divider">
+            <span>or</span>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-google" id="googleSignInBtn">
+              <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right: 8px;">
+                <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+                <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z"/>
+                <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z"/>
+              </svg>
+              Continue with Google
+            </button>
+          </div>
+
           <p class="auth-switch">
             <span id="authSwitchText">Don't have an account?</span>
             <a href="#" id="authSwitchLink">Sign up</a>
@@ -389,6 +473,14 @@
               <option value="tiktok">TikTok</option>
               <option value="both">Both</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label>Grid Type *</label>
+            <select id="collectionGridType" required class="input">
+              <option value="standard">Standard Grid (Photos)</option>
+              <option value="reel">Reel Grid (Videos)</option>
+            </select>
+            <small class="text-muted">Standard grids accept images, Reel grids accept videos</small>
           </div>
           <div class="form-row">
             <div class="form-group">

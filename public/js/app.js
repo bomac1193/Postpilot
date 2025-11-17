@@ -12,6 +12,14 @@ class PostPilot {
 
   async init() {
     this.setupEventListeners();
+
+    // Check for Google OAuth callback
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('google')) {
+      this.handleGoogleCallback(urlParams);
+      return;
+    }
+
     if (this.token) {
       await this.loadCurrentUser();
     } else {
@@ -34,6 +42,7 @@ class PostPilot {
     document.getElementById('authForm')?.addEventListener('submit', (e) => this.handleAuth(e));
     document.getElementById('authSwitchLink')?.addEventListener('click', (e) => this.toggleAuthMode(e));
     document.getElementById('closeAuthModal')?.addEventListener('click', () => this.hideAuthModal());
+    document.getElementById('googleSignInBtn')?.addEventListener('click', () => this.handleGoogleSignIn());
 
     // Upload
     document.getElementById('uploadContentBtn')?.addEventListener('click', () => this.showUploadModal());
@@ -55,6 +64,14 @@ class PostPilot {
     document.getElementById('closeContentModal')?.addEventListener('click', () => this.hideContentModal());
     document.getElementById('analyzeAgainBtn')?.addEventListener('click', () => this.analyzeContent());
     document.getElementById('addToGridBtn')?.addEventListener('click', () => this.addContentToGrid());
+
+    // Social Accounts
+    document.getElementById('connectSocial')?.addEventListener('click', () => this.showSocialModal());
+    document.getElementById('closeSocialModal')?.addEventListener('click', () => this.hideSocialModal());
+    document.getElementById('connectInstagramBtn')?.addEventListener('click', () => this.connectInstagram());
+    document.getElementById('disconnectInstagramBtn')?.addEventListener('click', () => this.disconnectInstagram());
+    document.getElementById('connectTikTokBtn')?.addEventListener('click', () => this.connectTikTok());
+    document.getElementById('disconnectTikTokBtn')?.addEventListener('click', () => this.disconnectTikTok());
   }
 
   // View Management
@@ -157,6 +174,31 @@ class PostPilot {
     this.showAuthModal();
   }
 
+  handleGoogleSignIn() {
+    // Redirect to Google OAuth
+    window.location.href = '/api/auth/google';
+  }
+
+  handleGoogleCallback(urlParams) {
+    const status = urlParams.get('google');
+    const token = urlParams.get('token');
+
+    // Clear URL parameters
+    window.history.replaceState({}, document.title, '/');
+
+    if (status === 'success' && token) {
+      this.token = token;
+      localStorage.setItem('postpilot_token', this.token);
+      this.showNotification('Successfully signed in with Google!', 'success');
+      this.loadCurrentUser().then(() => {
+        this.loadDashboard();
+      });
+    } else {
+      this.showNotification('Google sign-in failed. Please try again.', 'error');
+      this.showAuthModal();
+    }
+  }
+
   // Modal Management
   showAuthModal() {
     document.getElementById('authModal').classList.add('active');
@@ -174,6 +216,85 @@ class PostPilot {
     document.getElementById('uploadModal').classList.remove('active');
     document.getElementById('uploadForm').reset();
     document.getElementById('filePreview').innerHTML = '';
+  }
+
+  async showSocialModal() {
+    document.getElementById('socialAccountsModal').classList.add('active');
+    await this.loadSocialStatus();
+  }
+
+  hideSocialModal() {
+    document.getElementById('socialAccountsModal').classList.remove('active');
+  }
+
+  async loadSocialStatus() {
+    try {
+      const response = await this.api('/auth/social/status');
+
+      // Update Instagram status
+      const instagramStatus = document.getElementById('instagramStatus');
+      const connectInstagramBtn = document.getElementById('connectInstagramBtn');
+      const disconnectInstagramBtn = document.getElementById('disconnectInstagramBtn');
+
+      if (response.instagram.connected) {
+        instagramStatus.textContent = `Connected${response.instagram.username ? ' as ' + response.instagram.username : ''}`;
+        instagramStatus.classList.add('connected');
+        connectInstagramBtn.style.display = 'none';
+        disconnectInstagramBtn.style.display = 'block';
+      } else {
+        instagramStatus.textContent = 'Not connected';
+        instagramStatus.classList.remove('connected');
+        connectInstagramBtn.style.display = 'block';
+        disconnectInstagramBtn.style.display = 'none';
+      }
+
+      // Update TikTok status
+      const tiktokStatus = document.getElementById('tiktokStatus');
+      const connectTikTokBtn = document.getElementById('connectTikTokBtn');
+      const disconnectTikTokBtn = document.getElementById('disconnectTikTokBtn');
+
+      if (response.tiktok.connected) {
+        tiktokStatus.textContent = `Connected${response.tiktok.username ? ' as ' + response.tiktok.username : ''}`;
+        tiktokStatus.classList.add('connected');
+        connectTikTokBtn.style.display = 'none';
+        disconnectTikTokBtn.style.display = 'block';
+      } else {
+        tiktokStatus.textContent = 'Not connected';
+        tiktokStatus.classList.remove('connected');
+        connectTikTokBtn.style.display = 'block';
+        disconnectTikTokBtn.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Failed to load social status:', error);
+    }
+  }
+
+  connectInstagram() {
+    window.location.href = '/api/auth/instagram';
+  }
+
+  async disconnectInstagram() {
+    try {
+      await this.api('/auth/instagram/disconnect', 'POST');
+      this.showNotification('Instagram disconnected successfully', 'success');
+      this.loadSocialStatus();
+    } catch (error) {
+      this.showNotification('Failed to disconnect Instagram', 'error');
+    }
+  }
+
+  connectTikTok() {
+    window.location.href = '/api/auth/tiktok';
+  }
+
+  async disconnectTikTok() {
+    try {
+      await this.api('/auth/tiktok/disconnect', 'POST');
+      this.showNotification('TikTok disconnected successfully', 'success');
+      this.loadSocialStatus();
+    } catch (error) {
+      this.showNotification('Failed to disconnect TikTok', 'error');
+    }
   }
 
   showContentModal(content) {

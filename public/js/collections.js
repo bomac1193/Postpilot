@@ -15,6 +15,7 @@ class CollectionsManager {
 
   init() {
     this.setupEventListeners();
+    this.dragOverThrottle = null; // For throttling drag over events
   }
 
   setupEventListeners() {
@@ -150,13 +151,15 @@ class CollectionsManager {
    */
   renderCollectionGrid() {
     const container = document.getElementById('collectionGridContainer');
-    if (!container || !this.currentCollection) return;
+    if (!this.currentCollection) return;
 
-    const { columns, rows } = this.currentCollection.gridConfig;
+    const { columns, rows, gridType } = this.currentCollection.gridConfig;
     const items = this.currentCollection.items;
 
     let gridHTML = `
-      <div class="collection-grid" style="grid-template-columns: repeat(${columns}, 1fr);">
+      <div class="collection-grid"
+           data-grid-type="${gridType || 'standard'}"
+           style="grid-template-columns: repeat(${columns}, 1fr);">
     `;
 
     for (let row = 0; row < rows; row++) {
@@ -215,20 +218,31 @@ class CollectionsManager {
       return '<div class="content-library-empty">No content available. Upload some first!</div>';
     }
 
+    const gridType = this.currentCollection?.gridConfig?.gridType || 'standard';
+
     return `
       <div class="drag-source-library">
         <h3>Drag Content to Grid</h3>
+        <p class="text-muted">Grid Type: ${gridType === 'reel' ? 'Reel (Videos only)' : 'Standard (Photos only)'}</p>
         <div class="content-items">
-          ${this.app.currentContent.map(content => `
-            <div class="content-item-small"
-                 draggable="true"
+          ${this.app.currentContent.map(content => {
+            const isVideo = content.mediaType === 'video';
+            const isCompatible = (gridType === 'reel' && isVideo) || (gridType === 'standard' && !isVideo);
+            const mediaTypeIcon = isVideo ? '🎬' : '📷';
+
+            return `
+            <div class="content-item-small ${!isCompatible ? 'incompatible' : ''}"
+                 draggable="${isCompatible}"
                  data-content-id="${content._id}"
-                 ondragstart="collectionsManager.handleDragStart(event)">
+                 data-media-type="${content.mediaType}"
+                 ondragstart="collectionsManager.handleDragStart(event)"
+                 title="${!isCompatible ? `Cannot add ${isVideo ? 'video' : 'image'} to ${gridType} grid` : ''}">
               <img src="${content.thumbnailUrl || content.mediaUrl}" alt="${content.title}">
+              <span class="media-type-badge">${mediaTypeIcon}</span>
               <span class="content-title">${content.title}</span>
               <div class="ai-score-badge">${Math.round(content.aiScores?.overallScore || 0)}</div>
             </div>
-          `).join('')}
+          `}).join('')}
         </div>
       </div>
     `;
@@ -240,15 +254,24 @@ class CollectionsManager {
   handleDragStart(event) {
     this.draggedElement = event.target;
     this.draggedContentId = event.target.dataset.contentId;
+    this.draggedMediaType = event.target.dataset.mediaType;
     event.target.classList.add('dragging');
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/html', event.target.innerHTML);
+    event.dataTransfer.setData('mediaType', this.draggedMediaType);
   }
 
   handleDragOver(event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    event.currentTarget.classList.add('drag-over');
+
+    // Throttle the visual update for better performance
+    if (!this.dragOverThrottle) {
+      event.currentTarget.classList.add('drag-over');
+      this.dragOverThrottle = setTimeout(() => {
+        this.dragOverThrottle = null;
+      }, 50); // Update visual state max every 50ms
+    }
   }
 
   handleDragLeave(event) {
@@ -264,6 +287,25 @@ class CollectionsManager {
     const col = parseInt(cell.dataset.col);
 
     if (!this.draggedContentId) return;
+
+    // Validate media type against grid type
+    const gridType = this.currentCollection?.gridConfig?.gridType || 'standard';
+    const isVideo = this.draggedMediaType === 'video';
+    const isCompatible = (gridType === 'reel' && isVideo) || (gridType === 'standard' && !isVideo);
+
+    if (!isCompatible) {
+      this.app.showNotification(
+        `Cannot add ${isVideo ? 'videos' : 'images'} to ${gridType === 'reel' ? 'reel' : 'standard'} grid. ${gridType === 'reel' ? 'Use videos only.' : 'Use images only.'}`,
+        'error'
+      );
+      if (this.draggedElement) {
+        this.draggedElement.classList.remove('dragging');
+      }
+      this.draggedElement = null;
+      this.draggedContentId = null;
+      this.draggedMediaType = null;
+      return;
+    }
 
     try {
       // Add content to collection at this position
@@ -288,16 +330,17 @@ class CollectionsManager {
       this.currentCollection = data.collection;
 
       this.renderCollectionGrid();
-      this.app.showSuccess('Content added to collection');
+      this.app.showNotification('Content added to collection', 'success');
     } catch (error) {
       console.error('Drop error:', error);
-      this.app.showError(error.message);
+      this.app.showNotification(error.message, 'error');
     } finally {
       if (this.draggedElement) {
         this.draggedElement.classList.remove('dragging');
       }
       this.draggedElement = null;
       this.draggedContentId = null;
+      this.draggedMediaType = null;
     }
   }
 
@@ -359,7 +402,8 @@ class CollectionsManager {
       platform: document.getElementById('collectionPlatform').value,
       gridConfig: {
         columns: parseInt(document.getElementById('collectionColumns').value) || 3,
-        rows: parseInt(document.getElementById('collectionRows').value) || 3
+        rows: parseInt(document.getElementById('collectionRows').value) || 3,
+        gridType: document.getElementById('collectionGridType').value || 'standard'
       }
     };
 

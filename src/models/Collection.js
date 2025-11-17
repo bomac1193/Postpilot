@@ -40,6 +40,11 @@ const collectionSchema = new mongoose.Schema({
       default: 3,
       min: 1,
       max: 20
+    },
+    gridType: {
+      type: String,
+      enum: ['standard', 'reel'],
+      default: 'standard'
     }
   },
 

@@ -7,6 +7,7 @@ const path = require('path');
 require('dotenv').config();
 
 const connectDB = require('./config/database');
+const passport = require('./config/passport');
 const authRoutes = require('./routes/auth');
 const contentRoutes = require('./routes/content');
 const gridRoutes = require('./routes/grid');
@@ -59,6 +60,9 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
+
+// Passport middleware
+app.use(passport.initialize());
 
 // Static files
 app.use(express.static(path.join(__dirname, '../public')));

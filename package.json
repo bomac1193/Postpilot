@@ -1,6 +1,6 @@
 {
   "name": "postpilot",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "AI-powered social media content planner and scheduler with grid preview",
   "main": "src/server.js",
   "scripts": {

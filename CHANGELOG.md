@@ -5,6 +5,148 @@ All notable changes to PostPilot will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2024-11-17
+
+### Added - MAJOR RELEASE
+
+**Collection System:**
+- Full collection management system for organizing grid layouts
+- Create unlimited collections with custom grid sizes
+- Drag-and-drop interface for content organization
+- Collection states (draft, scheduled, posting, completed, paused, failed)
+- Real-time progress tracking and statistics
+- Duplicate collections for campaigns
+- Collection-specific tags and descriptions
+
+**Instagram Integration:**
+- Complete Instagram Graph API v18.0 integration
+- Post images with captions and hashtags
+- Post videos with async processing
+- Long-lived token management (60-day expiry)
+- Automatic token refresh
+- Media container creation and publishing
+- Post URL and ID tracking
+- Error handling and retry logic
+
+**TikTok Integration:**
+- TikTok Open API v2 integration
+- Video upload and publishing
+- Chunk-based file upload for large videos
+- Async processing with status polling
+- Privacy level configuration
+- Duet/Comment/Stitch controls
+- Error tracking and recovery
+
+**Automated Scheduling:**
+- Comprehensive scheduling service with cron-like behavior
+- Multiple interval options (daily, every-other-day, weekly, custom)
+- Specific posting time configuration (hour/minute)
+- Timezone support
+- Auto-posting to Instagram and TikTok
+- Sequential posting from collections
+- Manual trigger support
+- Pause/resume functionality
+- Start and end date controls
+
+**Drag-and-Drop UI:**
+- Intuitive drag-and-drop grid interface
+- Drag content from library to grid positions
+- Reorder items within collection
+- Visual grid preview
+- Posted item indicators
+- Real-time updates
+- Mobile-responsive design ready
+
+**API Endpoints (20+ new):**
+- Collection CRUD operations (6 endpoints)
+- Content management within collections (3 endpoints)
+- Posting operations (7 endpoints)
+- Statistics and previews (2 endpoints)
+- Schedule management (2 endpoints)
+
+**Models:**
+- Collection model with comprehensive schema
+  * Grid configuration
+  * Scheduling settings
+  * Statistics tracking
+  * Error logging
+  * Status management
+- Updated Content model with platform post tracking
+
+**Services:**
+- Social Media Service (`socialMediaService.js`)
+  * Instagram posting logic
+  * TikTok posting logic
+  * Multi-platform support
+  * Token management
+  * Public URL generation
+- Scheduling Service (`schedulingService.js`)
+  * Automated collection processing
+  * Cron-like scheduler
+  * Error recovery
+  * Manual triggers
+  * Service status reporting
+
+**Documentation:**
+- Complete Collections Guide (`COLLECTIONS_GUIDE.md`)
+  * Setup instructions for Instagram/TikTok APIs
+  * Collection creation tutorial
+  * Scheduling configuration
+  * Drag-and-drop usage
+  * API reference
+  * Troubleshooting guide
+  * Best practices
+
+**Frontend:**
+- Collections Manager (`collections.js`)
+  * Collection list and selector
+  * Grid visualization
+  * Drag-and-drop handlers
+  * Schedule modal
+  * Statistics dashboard
+  * Real-time status updates
+
+### Changed
+- Server now automatically starts scheduling service on boot
+- Content model includes platformPostUrl and platformPostId fields
+- Enhanced error tracking throughout the application
+- Improved API response consistency
+
+### Technical Details
+- Instagram requires publicly accessible media URLs
+- TikTok supports video-only content
+- Scheduling service checks every 60 seconds
+- Collections support up to 9 columns
+- Async operations use polling (Instagram videos, TikTok uploads)
+- Comprehensive error logging with timestamps and codes
+- Database indexes for performance optimization
+- Graceful shutdown handling for scheduling service
+
+### Breaking Changes
+- Collection system introduces new workflow (grids still supported)
+- Instagram/TikTok posting requires API credentials
+- Server must be publicly accessible for Instagram posting
+- MongoDB required for scheduling persistence
+
+### Dependencies
+- No new external dependencies added
+- All integrations use existing packages (axios, mongoose, etc.)
+- FormData support for multipart uploads
+
+### Known Limitations
+- Instagram carousel posting not yet implemented
+- Instagram requires business/creator accounts
+- TikTok video processing may take 30-60 seconds
+- Scheduling granularity is 1 minute
+- Token refresh must be done manually if expired during posting
+
+### Migration Notes
+For users upgrading from v1.x:
+1. Add social media API credentials to `.env`
+2. Restart server to initialize scheduling service
+3. Connect Instagram/TikTok accounts via Settings
+4. Create collections and migrate existing grids if desired
+
 ## [1.0.1] - 2024-11-17
 
 ### Added

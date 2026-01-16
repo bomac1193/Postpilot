@@ -46,27 +46,40 @@ function ReelThumbnailSelector({ reel, videoFile, onSave, onClose }) {
   // Handle video can play - ready to capture
   const handleCanPlay = () => {
     setIsVideoReady(true);
+    // Pause the video to prevent playback
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
   };
 
-  // Handle time update
-  const handleTimeUpdate = () => {
-    if (videoRef.current) {
+  // Track if we're currently seeking (dragging the slider)
+  const [isSeeking, setIsSeeking] = useState(false);
+
+  // Handle video seeked - update time display (no auto-capture to avoid performance issues)
+  const handleSeeked = () => {
+    if (videoRef.current && !isSeeking) {
       setCurrentTime(videoRef.current.currentTime);
     }
   };
 
-  // Handle video seeked - capture frame automatically
-  const handleSeeked = () => {
-    captureCurrentFrame();
-  };
-
-  // Handle seeking when slider changes
+  // Handle seeking when slider changes - update video position for visual feedback
   const handleSeek = (e) => {
     const time = parseFloat(e.target.value);
+    setCurrentTime(time);
     if (videoRef.current) {
       videoRef.current.currentTime = time;
-      setCurrentTime(time);
     }
+  };
+
+  // Handle when user starts dragging the slider
+  const handleSeekStart = () => {
+    setIsSeeking(true);
+  };
+
+  // Handle when user finishes dragging the slider - capture frame
+  const handleSeekEnd = () => {
+    setIsSeeking(false);
+    captureCurrentFrame();
   };
 
   // Step forward/backward by small increments
@@ -225,10 +238,10 @@ function ReelThumbnailSelector({ reel, videoFile, onSave, onClose }) {
                   className="w-full h-full object-contain"
                   onLoadedMetadata={handleLoadedMetadata}
                   onCanPlay={handleCanPlay}
-                  onTimeUpdate={handleTimeUpdate}
                   onSeeked={handleSeeked}
                   muted
                   playsInline
+                  preload="metadata"
                 />
               </div>
 
@@ -250,9 +263,13 @@ function ReelThumbnailSelector({ reel, videoFile, onSave, onClose }) {
                     type="range"
                     min="0"
                     max={duration || 1}
-                    step="0.01"
+                    step="0.1"
                     value={currentTime}
                     onChange={handleSeek}
+                    onMouseDown={handleSeekStart}
+                    onMouseUp={handleSeekEnd}
+                    onTouchStart={handleSeekStart}
+                    onTouchEnd={handleSeekEnd}
                     className="flex-1 h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-accent-purple"
                   />
 

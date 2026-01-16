@@ -1,5 +1,20 @@
 import { useState, useRef, useCallback } from 'react';
-import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save } from 'lucide-react';
+import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useAppStore } from '../../stores/useAppStore';
 
 // Remap zoom: slider 80%-200% maps to actual 80%-400%
@@ -10,10 +25,171 @@ const getActualZoom = (sliderValue) => {
   return sliderValue * sliderValue;
 };
 
+// Sortable grid item component
+function SortableGridItem({ post, id }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="aspect-square bg-dark-700 overflow-hidden cursor-grab active:cursor-grabbing"
+    >
+      {post.image ? (
+        <img
+          src={post.image}
+          alt=""
+          className="w-full h-full object-cover pointer-events-none"
+          draggable={false}
+        />
+      ) : (
+        <div
+          className="w-full h-full"
+          style={{ backgroundColor: post.color || '#3f3f46' }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Row drag handle component
+function RowDragHandle({ rowIndex, onMoveRow, totalRows }) {
+  const handleMoveUp = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (rowIndex > 0) {
+      onMoveRow(rowIndex, rowIndex - 1);
+    }
+  };
+
+  const handleMoveDown = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (rowIndex < totalRows - 1) {
+      onMoveRow(rowIndex, rowIndex + 1);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-1 px-2">
+      <button
+        onClick={handleMoveUp}
+        onPointerDown={(e) => e.stopPropagation()}
+        disabled={rowIndex === 0}
+        className={`p-1 rounded transition-colors ${
+          rowIndex === 0 ? 'text-dark-600 cursor-not-allowed' : 'text-dark-400 hover:text-dark-100 hover:bg-dark-600 active:bg-dark-500'
+        }`}
+        title="Move row up"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+      <GripVertical className="w-4 h-4 text-dark-500" />
+      <button
+        onClick={handleMoveDown}
+        onPointerDown={(e) => e.stopPropagation()}
+        disabled={rowIndex === totalRows - 1}
+        className={`p-1 rounded transition-colors ${
+          rowIndex === totalRows - 1 ? 'text-dark-600 cursor-not-allowed' : 'text-dark-400 hover:text-dark-100 hover:bg-dark-600 active:bg-dark-500'
+        }`}
+        title="Move row down"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function GridPreview({ posts, layout }) {
   const cols = layout?.cols || 3;
   const user = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
+  const setGridPosts = useAppStore((state) => state.setGridPosts);
+
+  // Drag and drop state
+  const [activeId, setActiveId] = useState(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag starts
+      },
+    })
+  );
+
+  // Get post IDs for sortable context
+  const postIds = posts.map((p) => p.id || p._id);
+
+  // Handle drag start
+  const handleDragStart = (event) => {
+    setActiveId(event.active.id);
+  };
+
+  // Handle drag end - reorder posts
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (over && active.id !== over.id) {
+      const oldIndex = posts.findIndex((p) => (p.id || p._id) === active.id);
+      const newIndex = posts.findIndex((p) => (p.id || p._id) === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newPosts = arrayMove([...posts], oldIndex, newIndex);
+        setGridPosts(newPosts);
+      }
+    }
+  };
+
+  // Handle row move
+  const handleMoveRow = (fromRow, toRow) => {
+    if (toRow < 0) return;
+
+    const totalRows = Math.ceil(posts.length / cols);
+    if (toRow >= totalRows) return;
+
+    // Group posts into rows
+    const rowsArray = [];
+    for (let i = 0; i < posts.length; i += cols) {
+      rowsArray.push(posts.slice(i, i + cols));
+    }
+
+    // Swap the rows
+    const temp = rowsArray[fromRow];
+    rowsArray[fromRow] = rowsArray[toRow];
+    rowsArray[toRow] = temp;
+
+    // Flatten back to single array
+    const newPosts = rowsArray.flat();
+    setGridPosts(newPosts);
+  };
+
+  // Get active post for drag overlay
+  const activePost = activeId ? posts.find((p) => (p.id || p._id) === activeId) : null;
+
+  // Group posts into rows for row controls
+  const rows = [];
+  for (let i = 0; i < posts.length; i += cols) {
+    rows.push(posts.slice(i, i + cols));
+  }
 
   // Avatar editor state
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -271,30 +447,71 @@ function GridPreview({ posts, layout }) {
         </button>
       </div>
 
-      {/* Grid */}
-      <div
-        className="grid gap-0.5"
-        style={{
-          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        }}
+      {/* Grid with Drag and Drop */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
-        {posts.map((post) => (
-          <div key={post.id || post._id} className="aspect-square bg-dark-700 overflow-hidden">
-            {post.image ? (
-              <img
-                src={post.image}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div
-                className="w-full h-full"
-                style={{ backgroundColor: post.color || '#3f3f46' }}
-              />
+        <SortableContext items={postIds} strategy={rectSortingStrategy}>
+          <div className="flex">
+            {/* Row Controls */}
+            {posts.length > 0 && (
+              <div className="flex flex-col justify-around">
+                {rows.map((_, rowIndex) => (
+                  <div
+                    key={rowIndex}
+                    className="flex items-center flex-1"
+                  >
+                    <RowDragHandle
+                      rowIndex={rowIndex}
+                      onMoveRow={handleMoveRow}
+                      totalRows={rows.length}
+                    />
+                  </div>
+                ))}
+              </div>
             )}
+
+            {/* Grid */}
+            <div
+              className="grid gap-0.5 flex-1"
+              style={{
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+              }}
+            >
+              {posts.map((post) => (
+                <SortableGridItem
+                  key={post.id || post._id}
+                  id={post.id || post._id}
+                  post={post}
+                />
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
+        </SortableContext>
+
+        {/* Drag Overlay */}
+        <DragOverlay>
+          {activePost ? (
+            <div className="aspect-square bg-dark-700 overflow-hidden shadow-2xl rounded-lg opacity-90">
+              {activePost.image ? (
+                <img
+                  src={activePost.image}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div
+                  className="w-full h-full"
+                  style={{ backgroundColor: activePost.color || '#3f3f46' }}
+                />
+              )}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Empty State */}
       {posts.length === 0 && (

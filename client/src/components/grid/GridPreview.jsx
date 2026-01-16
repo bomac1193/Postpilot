@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
-import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical, Replace, Layers } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical, Replace, Layers, Trash2, Eye, EyeOff } from 'lucide-react';
 import { setInternalDragActive } from '../../utils/dragState';
 import {
   DndContext,
@@ -28,7 +28,7 @@ const getActualZoom = (sliderValue) => {
 };
 
 // Sortable row component with drag handle
-function SortableRow({ rowId, rowIndex, children }) {
+function SortableRow({ rowId, rowIndex, children, showHandle = true }) {
   const {
     attributes,
     listeners,
@@ -47,15 +47,17 @@ function SortableRow({ rowId, rowIndex, children }) {
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-center">
-      {/* Drag Handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="flex items-center justify-center px-2 py-4 cursor-grab active:cursor-grabbing hover:bg-dark-700/50 rounded-l transition-colors"
-        title="Drag to reorder row"
-      >
-        <GripVertical className="w-5 h-5 text-dark-500 hover:text-dark-300" />
-      </div>
+      {/* Drag Handle - conditionally visible */}
+      {showHandle && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex items-center justify-center px-2 py-4 cursor-grab active:cursor-grabbing hover:bg-dark-700/50 rounded-l transition-colors"
+          title="Drag to reorder row"
+        >
+          <GripVertical className="w-5 h-5 text-dark-500 hover:text-dark-300" />
+        </div>
+      )}
       {/* Row Content */}
       <div className="flex-1">
         {children}
@@ -66,7 +68,7 @@ function SortableRow({ rowId, rowIndex, children }) {
 
 // Draggable grid item with drop zone (handles both internal drags AND file drops from explorer)
 // Default drag = rearrange, Shift+drag = replace/carousel, File drop = replace/carousel
-function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, onReorder, onReplaceOrCarousel }) {
+function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, onReorder, onReplaceOrCarousel, isSelected, onSelect, onDelete }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isOver, setIsOver] = useState(false);
   const [isFileOver, setIsFileOver] = useState(false);
@@ -76,6 +78,18 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
   // Get all images for this post (for carousel support)
   const images = post.images || (post.image ? [post.image] : []);
   const isCarousel = images.length > 1;
+
+  // Handle click to select
+  const handleClick = (e) => {
+    e.stopPropagation();
+    onSelect?.(postId);
+  };
+
+  // Handle trash icon click
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    onDelete?.(postId);
+  };
 
   const handleDragStart = (e) => {
     e.stopPropagation();
@@ -200,6 +214,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
   return (
     <div
       draggable
+      onClick={handleClick}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragEnter={handleDragEnter}
@@ -208,7 +223,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
       onDrop={handleDrop}
       className={`aspect-square bg-dark-700 overflow-hidden cursor-grab active:cursor-grabbing relative select-none ${
         isDragging ? 'opacity-40' : ''
-      } ${isOver ? 'ring-4 ring-accent-purple scale-105 transition-all duration-150' : ''} ${isFileOver ? 'ring-4 ring-green-500 scale-105 transition-all duration-150' : ''}`}
+      } ${isSelected ? 'ring-4 ring-accent-purple' : ''} ${isOver ? 'ring-4 ring-accent-purple scale-105 transition-all duration-150' : ''} ${isFileOver ? 'ring-4 ring-green-500 scale-105 transition-all duration-150' : ''}`}
     >
       {images.length > 0 ? (
         <>
@@ -235,6 +250,19 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
         <div className="w-full h-full bg-dark-600 pointer-events-none" />
       )}
 
+      {/* Selected state - show trash icon */}
+      {isSelected && (
+        <div className="absolute inset-0 bg-black/30 pointer-events-none">
+          <button
+            onClick={handleDeleteClick}
+            className="absolute bottom-2 right-2 p-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors pointer-events-auto"
+            title="Delete image"
+          >
+            <Trash2 className="w-4 h-4 text-white" />
+          </button>
+        </div>
+      )}
+
       {/* File drop indicator overlay */}
       {isFileOver && (
         <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center pointer-events-none">
@@ -256,7 +284,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
   );
 }
 
-function GridPreview({ posts, layout }) {
+function GridPreview({ posts, layout, showRowHandles = true }) {
   const cols = layout?.cols || 3;
   const user = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
@@ -313,6 +341,82 @@ function GridPreview({ posts, layout }) {
   const [showDropModal, setShowDropModal] = useState(false);
   const [dropSource, setDropSource] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+
+  // Selection and delete state
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Handle item selection
+  const handleSelectItem = useCallback((postId) => {
+    setSelectedItemId(prevId => prevId === postId ? null : postId);
+  }, []);
+
+  // Handle delete request (from trash icon or keyboard)
+  const handleDeleteRequest = useCallback((postId) => {
+    const post = posts.find(p => (p.id || p._id) === postId);
+    if (post) {
+      setItemToDelete(post);
+      setShowDeleteConfirm(true);
+    }
+  }, [posts]);
+
+  // Confirm delete
+  const handleConfirmDelete = useCallback(() => {
+    if (itemToDelete) {
+      const itemId = itemToDelete.id || itemToDelete._id;
+      const newPosts = posts.filter(p => (p.id || p._id) !== itemId);
+      setGridPosts(newPosts);
+      setSelectedItemId(null);
+    }
+    setShowDeleteConfirm(false);
+    setItemToDelete(null);
+  }, [itemToDelete, posts, setGridPosts]);
+
+  // Cancel delete
+  const handleCancelDelete = useCallback(() => {
+    setShowDeleteConfirm(false);
+    setItemToDelete(null);
+  }, []);
+
+  // Keyboard listener for Delete/Backspace and Enter to confirm delete
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // If delete modal is open, Enter confirms delete, Escape cancels
+      if (showDeleteConfirm) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleConfirmDelete();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancelDelete();
+        }
+        return;
+      }
+
+      // Normal selection mode
+      if (selectedItemId && (e.key === 'Delete' || e.key === 'Backspace')) {
+        // Don't trigger if user is typing in an input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+          return;
+        }
+        e.preventDefault();
+        handleDeleteRequest(selectedItemId);
+      }
+      // Escape to deselect
+      if (e.key === 'Escape') {
+        setSelectedItemId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItemId, handleDeleteRequest, showDeleteConfirm, handleConfirmDelete, handleCancelDelete]);
+
+  // Click outside to deselect
+  const handleBackgroundClick = useCallback(() => {
+    setSelectedItemId(null);
+  }, []);
 
   // Handle item drag start (just for tracking)
   const handleItemDragStart = (postId, post) => {
@@ -817,7 +921,7 @@ function GridPreview({ posts, layout }) {
           <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col">
               {rows.map((row, rowIndex) => (
-                <SortableRow key={`row-${rowIndex}`} rowId={`row-${rowIndex}`} rowIndex={rowIndex}>
+                <SortableRow key={`row-${rowIndex}`} rowId={`row-${rowIndex}`} rowIndex={rowIndex} showHandle={showRowHandles}>
                   <div
                     className="grid gap-0.5"
                     style={{
@@ -833,6 +937,9 @@ function GridPreview({ posts, layout }) {
                         onReorder={handleReorder}
                         onReplaceOrCarousel={handleReplaceOrCarouselDrag}
                         onFileDrop={handleFileDrop}
+                        isSelected={selectedItemId === (post.id || post._id)}
+                        onSelect={handleSelectItem}
+                        onDelete={handleDeleteRequest}
                       />
                     ))}
                   </div>
@@ -1194,6 +1301,65 @@ function GridPreview({ posts, layout }) {
                 className="w-full py-2 text-dark-400 hover:text-dark-200 text-sm transition-colors"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && itemToDelete && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          onClick={handleCancelDelete}
+        >
+          <div
+            className="bg-dark-800 rounded-2xl p-6 w-full max-w-sm border border-dark-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-dark-100">Delete Image?</h3>
+              <button onClick={handleCancelDelete} className="text-dark-400 hover:text-dark-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Preview of the image to delete */}
+            <div className="flex justify-center mb-4">
+              <div className="w-24 h-24 rounded-lg overflow-hidden bg-dark-700">
+                {(itemToDelete.images?.[0] || itemToDelete.image) ? (
+                  <img
+                    src={itemToDelete.images?.[0] || itemToDelete.image}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="w-full h-full"
+                    style={{ backgroundColor: itemToDelete.color || '#3f3f46' }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <p className="text-dark-300 text-center mb-6">
+              Are you sure you want to delete this image? This action cannot be undone.
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelDelete}
+                className="flex-1 py-2.5 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-lg transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
               </button>
             </div>
           </div>

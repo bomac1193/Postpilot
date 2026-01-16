@@ -29,6 +29,7 @@ import {
   Unlock,
   Download,
   Eye,
+  EyeOff,
   Plus,
   Trash2,
   Instagram,
@@ -106,6 +107,7 @@ function GridPlanner() {
   const [showPreview, setShowPreview] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const [gridZoom, setGridZoom] = useState(100); // Zoom percentage (50-150)
+  const [showRowHandles, setShowRowHandles] = useState(true); // Toggle for row drag handles in preview
 
   // Drag-drop upload state
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -852,6 +854,24 @@ function GridPlanner() {
                 </>
               )}
             </button>
+
+            {/* Row Handles Toggle (for Preview mode) */}
+            <button
+              onClick={() => setShowRowHandles(!showRowHandles)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                showRowHandles
+                  ? 'bg-accent-purple/20 text-accent-purple'
+                  : 'bg-dark-700 text-dark-300 hover:text-dark-100'
+              }`}
+              title={showRowHandles ? 'Hide row handles' : 'Show row handles'}
+            >
+              <GripVertical className="w-4 h-4" />
+              {showRowHandles ? (
+                <Eye className="w-4 h-4" />
+              ) : (
+                <EyeOff className="w-4 h-4" />
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -936,7 +956,7 @@ function GridPlanner() {
         {/* Grid */}
         <div className="flex-1 overflow-auto">
           {showPreview ? (
-            <GridPreview posts={gridPosts} layout={currentLayout} />
+            <GridPreview posts={gridPosts} layout={currentLayout} showRowHandles={showRowHandles} />
           ) : (
             <div className="bg-dark-800 rounded-2xl p-6 border border-dark-700">
               {/* Instagram Header Mock */}

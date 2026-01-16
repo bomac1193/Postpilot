@@ -10,8 +10,44 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react';
+
+// Custom magic wand logo icon for creator-magician brand
+function MagicWandLogo({ className }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Wand */}
+      <path
+        d="M3 21L15 9"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      {/* Wand tip glow */}
+      <circle cx="16" cy="8" r="1.5" fill="currentColor" opacity="0.9" />
+      {/* Magic sparkles */}
+      <path
+        d="M19 4L19.5 5.5L21 6L19.5 6.5L19 8L18.5 6.5L17 6L18.5 5.5L19 4Z"
+        fill="currentColor"
+      />
+      <path
+        d="M21 10L21.3 11L22.3 11.3L21.3 11.6L21 12.6L20.7 11.6L19.7 11.3L20.7 11L21 10Z"
+        fill="currentColor"
+        opacity="0.7"
+      />
+      <path
+        d="M14 3L14.3 4L15.3 4.3L14.3 4.6L14 5.6L13.7 4.6L12.7 4.3L13.7 4L14 3Z"
+        fill="currentColor"
+        opacity="0.5"
+      />
+    </svg>
+  );
+}
 
 const navItems = [
   { path: '/grid', icon: LayoutGrid, label: 'Grid Planner' },
@@ -33,19 +69,30 @@ function Sidebar() {
         sidebarCollapsed ? 'w-16' : 'w-64'
       }`}
     >
-      {/* Logo */}
+      {/* Logo - Creator Magician Brand */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-dark-700">
         {!sidebarCollapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-purple to-accent-pink flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-amber-500 flex items-center justify-center shadow-lg shadow-purple-500/20 relative">
+              <MagicWandLogo className="w-5 h-5 text-white" />
+              {/* Subtle glow effect */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-violet-400/20 to-amber-400/20 blur-sm -z-10" />
             </div>
-            <span className="font-display font-semibold text-lg">PostPilot</span>
+            <div className="flex flex-col">
+              <span className="font-display font-bold text-lg tracking-tight bg-gradient-to-r from-white via-purple-100 to-amber-100 bg-clip-text text-transparent">
+                PostPilot
+              </span>
+              <span className="text-[10px] text-purple-300/60 tracking-widest uppercase -mt-0.5">
+                Create Magic
+              </span>
+            </div>
           </div>
         )}
         {sidebarCollapsed && (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-purple to-accent-pink flex items-center justify-center mx-auto">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 via-purple-600 to-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-purple-500/20 relative group cursor-pointer">
+            <MagicWandLogo className="w-5 h-5 text-white transition-transform group-hover:rotate-12" />
+            {/* Subtle glow effect */}
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-violet-400/20 to-amber-400/20 blur-sm -z-10" />
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical } from 'lucide-react';
+import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical, Replace, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -7,6 +7,8 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
+  useDraggable,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -63,6 +65,62 @@ function SortableRow({ rowId, rowIndex, children }) {
   );
 }
 
+// Draggable and droppable grid item
+function DraggableGridItem({ post, postId, isBeingDraggedOver, activeItemId }) {
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `item-${postId}`,
+    data: { post, postId },
+  });
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `drop-${postId}`,
+    data: { post, postId },
+  });
+
+  // Get all images for this post (for carousel support)
+  const images = post.images || (post.image ? [post.image] : []);
+  const isCarousel = images.length > 1;
+
+  return (
+    <div
+      ref={(node) => {
+        setDragRef(node);
+        setDropRef(node);
+      }}
+      {...attributes}
+      {...listeners}
+      className={`aspect-square bg-dark-700 overflow-hidden cursor-grab active:cursor-grabbing relative ${
+        isDragging ? 'opacity-50 z-10' : ''
+      } ${isOver && activeItemId !== `item-${postId}` ? 'ring-2 ring-accent-purple ring-inset' : ''}`}
+    >
+      {images.length > 0 ? (
+        <>
+          <img
+            src={images[0]}
+            alt=""
+            className="w-full h-full object-cover pointer-events-none"
+            draggable={false}
+          />
+          {/* Carousel indicator */}
+          {isCarousel && (
+            <div className="absolute top-2 right-2 bg-dark-900/70 rounded px-1.5 py-0.5 flex items-center gap-1">
+              <Layers className="w-3 h-3 text-white" />
+              <span className="text-xs text-white font-medium">{images.length}</span>
+            </div>
+          )}
+        </>
+      ) : post.color ? (
+        <div
+          className="w-full h-full"
+          style={{ backgroundColor: post.color }}
+        />
+      ) : (
+        <div className="w-full h-full bg-dark-600" />
+      )}
+    </div>
+  );
+}
+
 function GridPreview({ posts, layout }) {
   const cols = layout?.cols || 3;
   const user = useAppStore((state) => state.user);
@@ -115,6 +173,119 @@ function GridPreview({ posts, layout }) {
   // Get active row for drag overlay
   const activeRowIndex = activeRowId ? parseInt(activeRowId.replace('row-', '')) : null;
   const activeRow = activeRowIndex !== null ? rows[activeRowIndex] : null;
+
+  // Item drag and drop state (for replace/carousel)
+  const [activeItemId, setActiveItemId] = useState(null);
+  const [showDropModal, setShowDropModal] = useState(false);
+  const [dropSource, setDropSource] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null);
+
+  const itemSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  // Handle item drag start
+  const handleItemDragStart = (event) => {
+    setActiveItemId(event.active.id);
+  };
+
+  // Handle item drag end
+  const handleItemDragEnd = (event) => {
+    const { active, over } = event;
+    setActiveItemId(null);
+
+    if (!over || active.id === over.id) return;
+
+    // Extract post IDs from the draggable/droppable IDs
+    const sourceId = active.id.replace('item-', '');
+    const targetId = over.id.replace('drop-', '');
+
+    if (sourceId === targetId) return;
+
+    const sourcePost = posts.find(p => (p.id || p._id) === sourceId);
+    const targetPost = posts.find(p => (p.id || p._id) === targetId);
+
+    if (sourcePost && targetPost) {
+      setDropSource(sourcePost);
+      setDropTarget(targetPost);
+      setShowDropModal(true);
+    }
+  };
+
+  // Handle replace action
+  const handleReplace = () => {
+    if (!dropSource || !dropTarget) return;
+
+    const sourceId = dropSource.id || dropSource._id;
+    const targetId = dropTarget.id || dropTarget._id;
+
+    // Get source images
+    const sourceImages = dropSource.images || (dropSource.image ? [dropSource.image] : []);
+
+    // Replace target with source content
+    const newPosts = posts.map(p => {
+      const postId = p.id || p._id;
+      if (postId === targetId) {
+        return {
+          ...p,
+          image: sourceImages[0] || dropSource.image,
+          images: sourceImages.length > 1 ? sourceImages : undefined,
+        };
+      }
+      return p;
+    }).filter(p => (p.id || p._id) !== sourceId); // Remove source post
+
+    setGridPosts(newPosts);
+    setShowDropModal(false);
+    setDropSource(null);
+    setDropTarget(null);
+  };
+
+  // Handle carousel action
+  const handleCreateCarousel = () => {
+    if (!dropSource || !dropTarget) return;
+
+    const sourceId = dropSource.id || dropSource._id;
+    const targetId = dropTarget.id || dropTarget._id;
+
+    // Collect all images from both posts
+    const sourceImages = dropSource.images || (dropSource.image ? [dropSource.image] : []);
+    const targetImages = dropTarget.images || (dropTarget.image ? [dropTarget.image] : []);
+    const combinedImages = [...targetImages, ...sourceImages];
+
+    // Update target to be a carousel and remove source
+    const newPosts = posts.map(p => {
+      const postId = p.id || p._id;
+      if (postId === targetId) {
+        return {
+          ...p,
+          image: combinedImages[0], // First image for backwards compatibility
+          images: combinedImages,
+        };
+      }
+      return p;
+    }).filter(p => (p.id || p._id) !== sourceId); // Remove source post
+
+    setGridPosts(newPosts);
+    setShowDropModal(false);
+    setDropSource(null);
+    setDropTarget(null);
+  };
+
+  // Cancel drop action
+  const handleCancelDrop = () => {
+    setShowDropModal(false);
+    setDropSource(null);
+    setDropTarget(null);
+  };
+
+  // Get active item for drag overlay
+  const activeItemPostId = activeItemId ? activeItemId.replace('item-', '') : null;
+  const activeItemPost = activeItemPostId ? posts.find(p => (p.id || p._id) === activeItemPostId) : null;
 
   // Avatar editor state
   const [showAvatarModal, setShowAvatarModal] = useState(false);
@@ -372,83 +543,118 @@ function GridPreview({ posts, layout }) {
         </button>
       </div>
 
-      {/* Grid with Row Drag and Drop */}
+      {/* Grid with Item Drag and Drop (for replace/carousel) */}
       <DndContext
-        sensors={rowSensors}
+        sensors={itemSensors}
         collisionDetection={closestCenter}
-        onDragStart={handleRowDragStart}
-        onDragEnd={handleRowDragEnd}
-        modifiers={[restrictToVerticalAxis]}
+        onDragStart={handleItemDragStart}
+        onDragEnd={handleItemDragEnd}
       >
-        <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-col">
-            {rows.map((row, rowIndex) => (
-              <SortableRow key={`row-${rowIndex}`} rowId={`row-${rowIndex}`} rowIndex={rowIndex}>
+        {/* Row Drag and Drop (nested for row reordering via grip handle) */}
+        <DndContext
+          sensors={rowSensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleRowDragStart}
+          onDragEnd={handleRowDragEnd}
+          modifiers={[restrictToVerticalAxis]}
+        >
+          <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+            <div className="flex flex-col">
+              {rows.map((row, rowIndex) => (
+                <SortableRow key={`row-${rowIndex}`} rowId={`row-${rowIndex}`} rowIndex={rowIndex}>
+                  <div
+                    className="grid gap-0.5"
+                    style={{
+                      gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {row.map((post) => (
+                      <DraggableGridItem
+                        key={post.id || post._id}
+                        post={post}
+                        postId={post.id || post._id}
+                        activeItemId={activeItemId}
+                      />
+                    ))}
+                  </div>
+                </SortableRow>
+              ))}
+            </div>
+          </SortableContext>
+
+          {/* Row Drag Overlay */}
+          <DragOverlay>
+            {activeRow ? (
+              <div className="flex items-center bg-dark-800/90 shadow-2xl rounded-lg border border-dark-600">
+                <div className="flex items-center justify-center px-2 py-4">
+                  <GripVertical className="w-5 h-5 text-dark-400" />
+                </div>
                 <div
-                  className="grid gap-0.5"
+                  className="grid gap-0.5 flex-1"
                   style={{
                     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
                   }}
                 >
-                  {row.map((post) => (
-                    <div
-                      key={post.id || post._id}
-                      className="aspect-square bg-dark-700 overflow-hidden"
-                    >
-                      {post.image ? (
-                        <img
-                          src={post.image}
-                          alt=""
-                          className="w-full h-full object-cover pointer-events-none"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div
-                          className="w-full h-full"
-                          style={{ backgroundColor: post.color || '#3f3f46' }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </SortableRow>
-            ))}
-          </div>
-        </SortableContext>
-
-        {/* Row Drag Overlay */}
-        <DragOverlay>
-          {activeRow ? (
-            <div className="flex items-center bg-dark-800/90 shadow-2xl rounded-lg border border-dark-600">
-              <div className="flex items-center justify-center px-2 py-4">
-                <GripVertical className="w-5 h-5 text-dark-400" />
-              </div>
-              <div
-                className="grid gap-0.5 flex-1"
-                style={{
-                  gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                }}
-              >
-                {activeRow.map((post) => (
-                  <div
-                    key={post.id || post._id}
-                    className="aspect-square bg-dark-700 overflow-hidden"
-                  >
-                    {post.image ? (
-                      <img
-                        src={post.image}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
+                  {activeRow.map((post) => {
+                    const images = post.images || (post.image ? [post.image] : []);
+                    return (
                       <div
-                        className="w-full h-full"
-                        style={{ backgroundColor: post.color || '#3f3f46' }}
-                      />
-                    )}
-                  </div>
-                ))}
+                        key={post.id || post._id}
+                        className="aspect-square bg-dark-700 overflow-hidden relative"
+                      >
+                        {images.length > 0 ? (
+                          <>
+                            <img
+                              src={images[0]}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                            {images.length > 1 && (
+                              <div className="absolute top-1 right-1 bg-dark-900/70 rounded px-1 py-0.5 flex items-center gap-0.5">
+                                <Layers className="w-2.5 h-2.5 text-white" />
+                                <span className="text-[10px] text-white font-medium">{images.length}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div
+                            className="w-full h-full"
+                            style={{ backgroundColor: post.color || '#3f3f46' }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+
+        {/* Item Drag Overlay */}
+        <DragOverlay>
+          {activeItemPost ? (
+            <div className="aspect-square w-24 bg-dark-700 overflow-hidden shadow-2xl rounded-lg opacity-90 relative">
+              {(activeItemPost.images?.[0] || activeItemPost.image) ? (
+                <>
+                  <img
+                    src={activeItemPost.images?.[0] || activeItemPost.image}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                  {activeItemPost.images?.length > 1 && (
+                    <div className="absolute top-1 right-1 bg-dark-900/70 rounded px-1 py-0.5 flex items-center gap-0.5">
+                      <Layers className="w-2.5 h-2.5 text-white" />
+                      <span className="text-[10px] text-white font-medium">{activeItemPost.images.length}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div
+                  className="w-full h-full"
+                  style={{ backgroundColor: activeItemPost.color || '#3f3f46' }}
+                />
+              )}
             </div>
           ) : null}
         </DragOverlay>
@@ -662,6 +868,101 @@ function GridPreview({ posts, layout }) {
                     Save
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replace/Carousel Modal */}
+      {showDropModal && dropSource && dropTarget && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          onClick={handleCancelDrop}
+        >
+          <div
+            className="bg-dark-800 rounded-2xl p-6 w-full max-w-sm border border-dark-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-dark-100">What would you like to do?</h3>
+              <button onClick={handleCancelDrop} className="text-dark-400 hover:text-dark-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Preview of the two posts */}
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-lg overflow-hidden bg-dark-700 mb-2">
+                  {(dropSource.images?.[0] || dropSource.image) ? (
+                    <img
+                      src={dropSource.images?.[0] || dropSource.image}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full"
+                      style={{ backgroundColor: dropSource.color || '#3f3f46' }}
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-dark-400">Dragged</p>
+              </div>
+              <div className="text-dark-500">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </div>
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-lg overflow-hidden bg-dark-700 mb-2 relative">
+                  {(dropTarget.images?.[0] || dropTarget.image) ? (
+                    <>
+                      <img
+                        src={dropTarget.images?.[0] || dropTarget.image}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                      {dropTarget.images?.length > 1 && (
+                        <div className="absolute top-1 right-1 bg-dark-900/70 rounded px-1 py-0.5 flex items-center gap-0.5">
+                          <Layers className="w-2.5 h-2.5 text-white" />
+                          <span className="text-[10px] text-white font-medium">{dropTarget.images.length}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div
+                      className="w-full h-full"
+                      style={{ backgroundColor: dropTarget.color || '#3f3f46' }}
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-dark-400">Target</p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={handleReplace}
+                className="w-full flex items-center justify-center gap-3 py-3 bg-dark-700 hover:bg-dark-600 text-dark-100 rounded-lg transition-colors"
+              >
+                <Replace className="w-5 h-5" />
+                <span className="font-medium">Replace Image</span>
+              </button>
+              <button
+                onClick={handleCreateCarousel}
+                className="w-full flex items-center justify-center gap-3 py-3 bg-accent-purple hover:bg-accent-purple/80 text-white rounded-lg transition-colors"
+              >
+                <Layers className="w-5 h-5" />
+                <span className="font-medium">Create Carousel</span>
+              </button>
+              <button
+                onClick={handleCancelDrop}
+                className="w-full py-2 text-dark-400 hover:text-dark-200 text-sm transition-colors"
+              >
+                Cancel
               </button>
             </div>
           </div>

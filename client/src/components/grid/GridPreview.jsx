@@ -367,40 +367,47 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
 
   const handleDragEnter = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
+    // Only handle internal reel drags, let file drops bubble up
     if (e.dataTransfer.types.includes('application/postpilot-reel')) {
+      e.stopPropagation();
+      dragCounterRef.current++;
       setIsOver(true);
     }
   };
 
   const handleDragOver = (e) => {
     e.preventDefault();
-    e.stopPropagation();
+    // Only handle internal reel drags, let file drops bubble up
     if (e.dataTransfer.types.includes('application/postpilot-reel')) {
+      e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
     }
   };
 
   const handleDragLeave = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) {
-      setIsOver(false);
+    // Only handle internal reel drags
+    if (e.dataTransfer.types.includes('application/postpilot-reel')) {
+      e.stopPropagation();
+      dragCounterRef.current--;
+      if (dragCounterRef.current === 0) {
+        setIsOver(false);
+      }
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current = 0;
-    setIsOver(false);
 
+    // Only handle internal reel drags, let file drops bubble up to parent
     const sourceId = e.dataTransfer.getData('application/postpilot-reel');
     if (sourceId && sourceId !== reelId) {
+      e.stopPropagation();
+      dragCounterRef.current = 0;
+      setIsOver(false);
       onReorder?.(sourceId, reelId);
     }
+    // File drops will bubble up to the parent container for video upload
   };
 
   const handleClick = (e) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../../stores/useAppStore';
 import { useNavigate } from 'react-router-dom';
 import { aiApi, postingApi } from '../../lib/api';
@@ -23,7 +23,30 @@ import {
   X,
   Loader2,
   Check,
+  RotateCw,
+  RotateCcw,
+  FlipHorizontal,
+  FlipVertical,
+  Crop,
+  ZoomIn,
+  ZoomOut,
+  Move,
+  Undo2,
+  Save,
+  SunMedium,
+  Contrast,
 } from 'lucide-react';
+
+// Crop aspect ratio presets
+const CROP_PRESETS = [
+  { id: 'free', label: 'Free', ratio: null },
+  { id: '1:1', label: '1:1', ratio: 1 },
+  { id: '4:5', label: '4:5', ratio: 4/5 },
+  { id: '9:16', label: '9:16', ratio: 9/16 },
+  { id: '16:9', label: '16:9', ratio: 16/9 },
+  { id: '4:3', label: '4:3', ratio: 4/3 },
+  { id: '3:4', label: '3:4', ratio: 3/4 },
+];
 
 // Platform tabs
 const PLATFORMS = [
@@ -89,8 +112,124 @@ function PostDetails({ post }) {
   const [selectedPlatforms, setSelectedPlatforms] = useState(['instagram']);
   const [scheduling, setScheduling] = useState(false);
   const [posting, setPosting] = useState(false);
+
+  // Quick Edit state
+  const [isQuickEditing, setIsQuickEditing] = useState(false);
+  const [editedImage, setEditedImage] = useState(null);
+  const [originalImage, setOriginalImage] = useState(null);
+  const [editSettings, setEditSettings] = useState({
+    scale: 100,
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+    brightness: 100,
+    contrast: 100,
+    cropAspect: 'free',
+  });
+  const [isCropping, setIsCropping] = useState(false);
+  const [cropArea, setCropArea] = useState({ x: 0, y: 0, width: 100, height: 100 });
+  const [saving, setSaving] = useState(false);
+  const canvasRef = useRef(null);
+  const imageRef = useRef(null);
+
+  // Drag state for crop box
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0, box: null });
+  const previewContainerRef = useRef(null);
+
+  // Crop box state for resizable crop
+  const [cropBox, setCropBox] = useState({ x: 0, y: 0, width: 100, height: 100 }); // percentages of actual image
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState(null); // 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, box: null });
+
+  // Track actual image bounds within container (for accurate crop overlay)
+  const [imageBounds, setImageBounds] = useState({ x: 0, y: 0, width: 100, height: 100 });
+
+  // Shift key state for free movement (no grid snap)
+  const [shiftHeld, setShiftHeld] = useState(false);
+
+  // Grid snap settings
+  const GRID_SNAP = 5; // Snap to 5% increments
+  const snapToGrid = (value, forceSnap = false) => {
+    if (shiftHeld && !forceSnap) return value; // Free movement when shift is held
+    return Math.round(value / GRID_SNAP) * GRID_SNAP;
+  };
   const [bestTimes, setBestTimes] = useState(null);
   const [loadingBestTimes, setLoadingBestTimes] = useState(false);
+
+  // Track shift key for free movement
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Shift') setShiftHeld(true);
+    };
+    const handleKeyUp = (e) => {
+      if (e.key === 'Shift') setShiftHeld(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Calculate actual image bounds within container (for object-contain)
+  const calculateImageBounds = () => {
+    if (!imageRef.current || !previewContainerRef.current) return;
+
+    const img = imageRef.current;
+    const container = previewContainerRef.current;
+    const containerRect = container.getBoundingClientRect();
+
+    const imgNaturalWidth = img.naturalWidth;
+    const imgNaturalHeight = img.naturalHeight;
+
+    if (!imgNaturalWidth || !imgNaturalHeight) return;
+
+    const containerAspect = containerRect.width / containerRect.height;
+    const imageAspect = imgNaturalWidth / imgNaturalHeight;
+
+    let renderedWidth, renderedHeight, offsetX, offsetY;
+
+    if (imageAspect > containerAspect) {
+      // Image is wider - fits width, letterboxed top/bottom
+      renderedWidth = containerRect.width;
+      renderedHeight = containerRect.width / imageAspect;
+      offsetX = 0;
+      offsetY = (containerRect.height - renderedHeight) / 2;
+    } else {
+      // Image is taller - fits height, pillarboxed left/right
+      renderedHeight = containerRect.height;
+      renderedWidth = containerRect.height * imageAspect;
+      offsetX = (containerRect.width - renderedWidth) / 2;
+      offsetY = 0;
+    }
+
+    setImageBounds({
+      x: offsetX,
+      y: offsetY,
+      width: renderedWidth,
+      height: renderedHeight,
+      containerWidth: containerRect.width,
+      containerHeight: containerRect.height,
+    });
+  };
+
+  // Recalculate bounds when image loads or quick edit opens
+  useEffect(() => {
+    if (isQuickEditing && imageRef.current) {
+      const img = imageRef.current;
+      if (img.complete) {
+        calculateImageBounds();
+      } else {
+        img.onload = calculateImageBounds;
+      }
+      // Also recalc on resize
+      window.addEventListener('resize', calculateImageBounds);
+      return () => window.removeEventListener('resize', calculateImageBounds);
+    }
+  }, [isQuickEditing, editedImage]);
 
   if (!post) {
     return (
@@ -242,6 +381,441 @@ function PostDetails({ post }) {
     setSelectedPlatforms((prev) =>
       prev.includes(platform) ? prev.filter((p) => p !== platform) : [...prev, platform]
     );
+  };
+
+  // Quick Edit Functions
+  const startQuickEdit = () => {
+    // Always work with the original image for non-destructive editing
+    const sourceImage = post.originalImage || post.image;
+    setOriginalImage(sourceImage);
+    setEditedImage(sourceImage);
+
+    // Restore previous edit settings if they exist, otherwise use defaults
+    const savedSettings = post.editSettings;
+    if (savedSettings) {
+      setEditSettings({
+        scale: savedSettings.scale || 100,
+        rotation: savedSettings.rotation || 0,
+        flipH: savedSettings.flipH || false,
+        flipV: savedSettings.flipV || false,
+        brightness: savedSettings.brightness || 100,
+        contrast: savedSettings.contrast || 100,
+        cropAspect: savedSettings.cropAspect || 'free',
+      });
+      // Restore crop box position
+      if (savedSettings.cropBox) {
+        setCropBox(savedSettings.cropBox);
+      } else {
+        setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+      }
+    } else {
+      setEditSettings({
+        scale: 100,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        brightness: 100,
+        contrast: 100,
+        cropAspect: 'free',
+      });
+      setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+    }
+    setIsQuickEditing(true);
+  };
+
+  const cancelQuickEdit = () => {
+    setIsQuickEditing(false);
+    setEditedImage(null);
+    setIsCropping(false);
+  };
+
+  // Reset current edits but keep working
+  const resetEdits = () => {
+    setEditSettings({
+      scale: 100,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      brightness: 100,
+      contrast: 100,
+      cropAspect: 'free',
+    });
+    setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+  };
+
+  // Completely restore to original image (remove all edits)
+  const restoreOriginal = () => {
+    const postId = post.id || post._id;
+    const originalImg = post.originalImage || post.image;
+
+    updatePost(postId, {
+      image: originalImg,
+      editSettings: null,
+      lastEdited: new Date().toISOString(),
+    });
+
+    // Reset local state
+    setEditSettings({
+      scale: 100,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      brightness: 100,
+      contrast: 100,
+      cropAspect: 'free',
+    });
+    setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+    setEditedImage(originalImg);
+  };
+
+  // Update crop box when aspect ratio changes
+  const updateCropAspect = (aspectId) => {
+    updateEditSetting('cropAspect', aspectId);
+    const selectedCrop = CROP_PRESETS.find(p => p.id === aspectId);
+
+    if (selectedCrop?.ratio && imageRef.current) {
+      const targetRatio = selectedCrop.ratio; // width/height we want
+      const imgWidth = imageRef.current.naturalWidth;
+      const imgHeight = imageRef.current.naturalHeight;
+
+      if (!imgWidth || !imgHeight) {
+        setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+        return;
+      }
+
+      const imageRatio = imgWidth / imgHeight;
+
+      // Calculate crop dimensions in percentages that result in correct pixel ratio
+      // If targetRatio > imageRatio: crop is wider than image, so we're limited by width
+      // If targetRatio < imageRatio: crop is taller than image, so we're limited by height
+
+      let cropWidthPercent, cropHeightPercent;
+
+      if (targetRatio > imageRatio) {
+        // Target is wider - use full width, calculate height
+        cropWidthPercent = 100;
+        // targetRatio = (cropWidthPercent/100 * imgWidth) / (cropHeightPercent/100 * imgHeight)
+        // cropHeightPercent = (cropWidthPercent * imgWidth) / (targetRatio * imgHeight) * 100 / 100
+        cropHeightPercent = (cropWidthPercent * imageRatio) / targetRatio;
+      } else {
+        // Target is taller - use full height, calculate width
+        cropHeightPercent = 100;
+        // targetRatio = (cropWidthPercent/100 * imgWidth) / (cropHeightPercent/100 * imgHeight)
+        // cropWidthPercent = (targetRatio * cropHeightPercent * imgHeight) / imgWidth
+        cropWidthPercent = (targetRatio * cropHeightPercent) / imageRatio;
+      }
+
+      // Center the crop box
+      setCropBox({
+        x: snapToGrid((100 - cropWidthPercent) / 2),
+        y: snapToGrid((100 - cropHeightPercent) / 2),
+        width: snapToGrid(cropWidthPercent),
+        height: snapToGrid(cropHeightPercent),
+      });
+    } else {
+      // Free crop - use full image
+      setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+    }
+  };
+
+  // Resize handlers for crop box corners
+  const handleResizeStart = (e, handle) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeHandle(handle);
+    const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    setResizeStart({ x: clientX, y: clientY, box: { ...cropBox } });
+  };
+
+  const handleResizeMove = (e) => {
+    if (!isResizing || !resizeHandle || !imageBounds.width) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+    // Calculate delta in percentage relative to ACTUAL IMAGE bounds
+    const deltaX = ((clientX - resizeStart.x) / imageBounds.width) * 100;
+    const deltaY = ((clientY - resizeStart.y) / imageBounds.height) * 100;
+
+    let newBox = { ...resizeStart.box };
+    const minSize = 10; // Minimum 10% size
+
+    // Get aspect ratio constraint if not free
+    const selectedCrop = CROP_PRESETS.find(p => p.id === editSettings.cropAspect);
+    const targetRatio = selectedCrop?.ratio;
+
+    // Get actual image aspect ratio for correct calculations
+    const imgWidth = imageRef.current?.naturalWidth || 1;
+    const imgHeight = imageRef.current?.naturalHeight || 1;
+    const imageRatio = imgWidth / imgHeight;
+
+    // Helper: calculate height% from width% to maintain target aspect ratio
+    // targetRatio = (widthPct/100 * imgW) / (heightPct/100 * imgH)
+    // heightPct = widthPct * imageRatio / targetRatio
+    const getHeightForWidth = (widthPct) => {
+      if (!targetRatio) return null;
+      return widthPct * imageRatio / targetRatio;
+    };
+
+    // Helper: calculate width% from height% to maintain target aspect ratio
+    const getWidthForHeight = (heightPct) => {
+      if (!targetRatio) return null;
+      return heightPct * targetRatio / imageRatio;
+    };
+
+    switch (resizeHandle) {
+      case 'se': // Bottom-right
+        newBox.width = Math.max(minSize, resizeStart.box.width + deltaX);
+        if (targetRatio) {
+          newBox.height = getHeightForWidth(newBox.width);
+        } else {
+          newBox.height = Math.max(minSize, resizeStart.box.height + deltaY);
+        }
+        break;
+      case 'sw': // Bottom-left
+        const newWidthSW = Math.max(minSize, resizeStart.box.width - deltaX);
+        newBox.x = resizeStart.box.x + (resizeStart.box.width - newWidthSW);
+        newBox.width = newWidthSW;
+        if (targetRatio) {
+          newBox.height = getHeightForWidth(newBox.width);
+        } else {
+          newBox.height = Math.max(minSize, resizeStart.box.height + deltaY);
+        }
+        break;
+      case 'ne': // Top-right
+        newBox.width = Math.max(minSize, resizeStart.box.width + deltaX);
+        if (targetRatio) {
+          const newHeightNE = getHeightForWidth(newBox.width);
+          newBox.y = resizeStart.box.y + (resizeStart.box.height - newHeightNE);
+          newBox.height = newHeightNE;
+        } else {
+          const newHeightNE = Math.max(minSize, resizeStart.box.height - deltaY);
+          newBox.y = resizeStart.box.y + (resizeStart.box.height - newHeightNE);
+          newBox.height = newHeightNE;
+        }
+        break;
+      case 'nw': // Top-left
+        const newWidthNW = Math.max(minSize, resizeStart.box.width - deltaX);
+        if (targetRatio) {
+          const newHeightNW = getHeightForWidth(newWidthNW);
+          newBox.x = resizeStart.box.x + (resizeStart.box.width - newWidthNW);
+          newBox.y = resizeStart.box.y + (resizeStart.box.height - newHeightNW);
+          newBox.width = newWidthNW;
+          newBox.height = newHeightNW;
+        } else {
+          const newHeightNW = Math.max(minSize, resizeStart.box.height - deltaY);
+          newBox.x = resizeStart.box.x + (resizeStart.box.width - newWidthNW);
+          newBox.y = resizeStart.box.y + (resizeStart.box.height - newHeightNW);
+          newBox.width = newWidthNW;
+          newBox.height = newHeightNW;
+        }
+        break;
+      case 'n': // Top
+        if (!targetRatio) {
+          const newHeightN = Math.max(minSize, resizeStart.box.height - deltaY);
+          newBox.y = resizeStart.box.y + (resizeStart.box.height - newHeightN);
+          newBox.height = newHeightN;
+        }
+        break;
+      case 's': // Bottom
+        if (!targetRatio) {
+          newBox.height = Math.max(minSize, resizeStart.box.height + deltaY);
+        }
+        break;
+      case 'e': // Right
+        newBox.width = Math.max(minSize, resizeStart.box.width + deltaX);
+        if (targetRatio) newBox.height = getHeightForWidth(newBox.width);
+        break;
+      case 'w': // Left
+        const newWidthW = Math.max(minSize, resizeStart.box.width - deltaX);
+        newBox.x = resizeStart.box.x + (resizeStart.box.width - newWidthW);
+        newBox.width = newWidthW;
+        if (targetRatio) newBox.height = getHeightForWidth(newBox.width);
+        break;
+    }
+
+    // Snap to grid
+    newBox.x = snapToGrid(Math.max(0, Math.min(newBox.x, 100 - newBox.width)));
+    newBox.y = snapToGrid(Math.max(0, Math.min(newBox.y, 100 - newBox.height)));
+    newBox.width = snapToGrid(Math.min(newBox.width, 100 - newBox.x));
+    newBox.height = snapToGrid(Math.min(newBox.height, 100 - newBox.y));
+
+    setCropBox(newBox);
+  };
+
+  const handleResizeEnd = () => {
+    setIsResizing(false);
+    setResizeHandle(null);
+  };
+
+  // Move crop box (drag the entire crop area)
+  const handleCropBoxDragStart = (e) => {
+    if (isResizing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    setDragStart({ x: clientX, y: clientY, box: { ...cropBox } });
+  };
+
+  const handleCropBoxDragMove = (e) => {
+    if (!isDragging || isResizing || !imageBounds.width) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+    // Calculate delta relative to ACTUAL IMAGE bounds
+    const deltaX = ((clientX - dragStart.x) / imageBounds.width) * 100;
+    const deltaY = ((clientY - dragStart.y) / imageBounds.height) * 100;
+
+    let newX = snapToGrid(dragStart.box.x + deltaX);
+    let newY = snapToGrid(dragStart.box.y + deltaY);
+
+    // Keep within bounds
+    newX = Math.max(0, Math.min(newX, 100 - cropBox.width));
+    newY = Math.max(0, Math.min(newY, 100 - cropBox.height));
+
+    setCropBox(prev => ({ ...prev, x: newX, y: newY }));
+  };
+
+  const updateEditSetting = (key, value) => {
+    setEditSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Handle tab change - auto-save quick edits when switching tabs
+  const handleTabChange = async (tabId) => {
+    if (isQuickEditing && tabId !== 'details') {
+      // Auto-save edits before switching tabs
+      await saveQuickEdit();
+    }
+    setActiveTab(tabId);
+  };
+
+  const rotateImage = (degrees) => {
+    setEditSettings(prev => ({
+      ...prev,
+      rotation: (prev.rotation + degrees + 360) % 360
+    }));
+  };
+
+  const flipImage = (direction) => {
+    if (direction === 'horizontal') {
+      setEditSettings(prev => ({ ...prev, flipH: !prev.flipH }));
+    } else {
+      setEditSettings(prev => ({ ...prev, flipV: !prev.flipV }));
+    }
+  };
+
+  // Apply edits and save
+  const saveQuickEdit = async () => {
+    // Always work from original image for non-destructive editing
+    const sourceImage = post.originalImage || post.image;
+    if (!sourceImage) return;
+
+    setSaving(true);
+    try {
+      // Get the correct post ID (MongoDB uses _id, local might use id)
+      const postId = post.id || post._id;
+      if (!postId) {
+        throw new Error('Post ID not found');
+      }
+
+      // Create a canvas to apply transformations
+      const img = new window.Image();
+
+      // Load the ORIGINAL image (not the current edited one)
+      await new Promise((resolve, reject) => {
+        img.onload = () => {
+          if (img.width === 0 || img.height === 0) {
+            reject(new Error('Image loaded with zero dimensions'));
+          } else {
+            resolve();
+          }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+
+        // Don't set crossOrigin for data URLs or blob URLs
+        if (!sourceImage.startsWith('data:') && !sourceImage.startsWith('blob:')) {
+          img.crossOrigin = 'anonymous';
+        }
+        img.src = sourceImage;
+      });
+
+      // Use cropBox percentages to calculate actual crop dimensions
+      const srcX = (cropBox.x / 100) * img.width;
+      const srcY = (cropBox.y / 100) * img.height;
+      const srcWidth = (cropBox.width / 100) * img.width;
+      const srcHeight = (cropBox.height / 100) * img.height;
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // Calculate output dimensions
+      const isRotated90 = editSettings.rotation === 90 || editSettings.rotation === 270;
+      const scaleFactor = editSettings.scale / 100;
+
+      let outWidth = srcWidth * scaleFactor;
+      let outHeight = srcHeight * scaleFactor;
+
+      if (isRotated90) {
+        canvas.width = Math.round(outHeight);
+        canvas.height = Math.round(outWidth);
+      } else {
+        canvas.width = Math.round(outWidth);
+        canvas.height = Math.round(outHeight);
+      }
+
+      // Apply transformations
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((editSettings.rotation * Math.PI) / 180);
+
+      if (editSettings.flipH) ctx.scale(-1, 1);
+      if (editSettings.flipV) ctx.scale(1, -1);
+
+      // Apply filters
+      ctx.filter = `brightness(${editSettings.brightness}%) contrast(${editSettings.contrast}%)`;
+
+      // Draw the cropped and scaled image
+      ctx.drawImage(
+        img,
+        srcX, srcY, srcWidth, srcHeight,  // Source rectangle (for cropping)
+        -outWidth / 2, -outHeight / 2, outWidth, outHeight  // Destination
+      );
+      ctx.restore();
+
+      // Get the edited image as data URL
+      const editedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+      // Save to post (non-destructive - we keep original in a separate field)
+      const originalImg = post.originalImage || post.image;
+
+      // Update the post in the store
+      updatePost(postId, {
+        image: editedDataUrl,
+        originalImage: originalImg,
+        lastEdited: new Date().toISOString(),
+        editSettings: { ...editSettings, cropBox: { ...cropBox } }
+      });
+
+      // Exit quick edit mode
+      setIsQuickEditing(false);
+      setEditedImage(null);
+
+      console.log('Quick edit saved successfully');
+    } catch (error) {
+      console.error('Failed to save edits:', error);
+      alert('Failed to save edits: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Instagram Preview Component
@@ -478,33 +1052,392 @@ function PostDetails({ post }) {
   // Details Tab Content
   const DetailsContent = () => (
     <>
-      {/* Preview Image */}
-      <div className="aspect-square bg-dark-700 relative flex-shrink-0">
-        {post.image ? (
-          <img
-            src={post.image}
-            alt={post.caption || 'Post preview'}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div
-            className="w-full h-full flex items-center justify-center"
-            style={{ backgroundColor: post.color || '#3f3f46' }}
-          >
-            <Image className="w-16 h-16 text-white/30" />
-          </div>
-        )}
+      {/* Preview Image / Quick Edit Area */}
+      <div className={`bg-dark-700 relative flex-shrink-0 ${isQuickEditing ? 'aspect-auto' : 'aspect-square'}`}>
+        {isQuickEditing ? (
+          // Quick Edit Mode
+          <div className="p-4 space-y-4">
+            {/* Edit Preview */}
+            <div
+              ref={previewContainerRef}
+              className="relative aspect-square bg-dark-900 rounded-lg overflow-hidden flex items-center justify-center select-none"
+              onMouseMove={(e) => {
+                if (isResizing) handleResizeMove(e);
+                else if (isDragging) handleCropBoxDragMove(e);
+              }}
+              onMouseUp={() => {
+                if (isResizing) handleResizeEnd();
+                else if (isDragging) setIsDragging(false);
+              }}
+              onMouseLeave={() => {
+                if (isResizing) handleResizeEnd();
+                else if (isDragging) setIsDragging(false);
+              }}
+              onTouchMove={(e) => {
+                if (isResizing) handleResizeMove(e);
+                else if (isDragging) handleCropBoxDragMove(e);
+              }}
+              onTouchEnd={() => {
+                if (isResizing) handleResizeEnd();
+                else if (isDragging) setIsDragging(false);
+              }}
+            >
+              {(editedImage || post.originalImage || post.image) ? (
+                <>
+                  <img
+                    ref={imageRef}
+                    src={editedImage || post.originalImage || post.image}
+                    alt="Edit preview"
+                    className="w-full h-full object-contain select-none"
+                    style={{
+                      filter: `brightness(${editSettings.brightness}%) contrast(${editSettings.contrast}%)`,
+                      transform: `rotate(${editSettings.rotation}deg) scaleX(${editSettings.flipH ? -1 : 1}) scaleY(${editSettings.flipV ? -1 : 1})`,
+                      transition: 'filter 0.2s, transform 0.2s',
+                    }}
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                  />
+                  {/* Interactive Crop Box - positioned over actual image bounds */}
+                  <div
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: imageBounds.x,
+                      top: imageBounds.y,
+                      width: imageBounds.width,
+                      height: imageBounds.height,
+                    }}
+                  >
+                    {/* Darkened overlay outside crop area */}
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background: `linear-gradient(to right,
+                          rgba(0,0,0,0.7) ${cropBox.x}%,
+                          transparent ${cropBox.x}%,
+                          transparent ${cropBox.x + cropBox.width}%,
+                          rgba(0,0,0,0.7) ${cropBox.x + cropBox.width}%)`
+                      }}
+                    />
+                    {/* Top darkened area */}
+                    <div
+                      className="absolute pointer-events-none bg-black/70"
+                      style={{
+                        left: `${cropBox.x}%`,
+                        width: `${cropBox.width}%`,
+                        top: 0,
+                        height: `${cropBox.y}%`
+                      }}
+                    />
+                    {/* Bottom darkened area */}
+                    <div
+                      className="absolute pointer-events-none bg-black/70"
+                      style={{
+                        left: `${cropBox.x}%`,
+                        width: `${cropBox.width}%`,
+                        top: `${cropBox.y + cropBox.height}%`,
+                        bottom: 0
+                      }}
+                    />
 
-        {/* Edit Overlay */}
-        <button
-          onClick={() => navigate('/editor', { state: { postId: post.id } })}
-          className="absolute inset-0 bg-black/0 hover:bg-black/50 transition-colors flex items-center justify-center opacity-0 hover:opacity-100"
-        >
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/20 rounded-lg backdrop-blur-sm">
-            <Edit3 className="w-4 h-4 text-white" />
-            <span className="text-white font-medium">Edit Image</span>
+                    {/* Grid lines for snap visualization - only show when not holding shift */}
+                    {!shiftHeld && (
+                      <div className="absolute inset-0 pointer-events-none opacity-20">
+                        {[20, 40, 60, 80].map((pos) => (
+                          <div key={`v-${pos}`} className="absolute h-full border-l border-white/30" style={{ left: `${pos}%` }} />
+                        ))}
+                        {[20, 40, 60, 80].map((pos) => (
+                          <div key={`h-${pos}`} className="absolute w-full border-t border-white/30" style={{ top: `${pos}%` }} />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Crop Box */}
+                    <div
+                      className="absolute border-2 border-white cursor-move pointer-events-auto"
+                      style={{
+                        left: `${cropBox.x}%`,
+                        top: `${cropBox.y}%`,
+                        width: `${cropBox.width}%`,
+                        height: `${cropBox.height}%`,
+                      }}
+                      onMouseDown={handleCropBoxDragStart}
+                      onTouchStart={handleCropBoxDragStart}
+                    >
+                      {/* Rule of thirds grid inside crop */}
+                      <div className="absolute inset-0 pointer-events-none">
+                        <div className="absolute left-1/3 top-0 bottom-0 border-l border-white/40" />
+                        <div className="absolute left-2/3 top-0 bottom-0 border-l border-white/40" />
+                        <div className="absolute top-1/3 left-0 right-0 border-t border-white/40" />
+                        <div className="absolute top-2/3 left-0 right-0 border-t border-white/40" />
+                      </div>
+
+                      {/* Corner resize handles */}
+                      <div
+                        className="absolute -top-2 -left-2 w-4 h-4 bg-white border-2 border-accent-purple rounded-sm cursor-nw-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'nw')}
+                        onTouchStart={(e) => handleResizeStart(e, 'nw')}
+                      />
+                      <div
+                        className="absolute -top-2 -right-2 w-4 h-4 bg-white border-2 border-accent-purple rounded-sm cursor-ne-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'ne')}
+                        onTouchStart={(e) => handleResizeStart(e, 'ne')}
+                      />
+                      <div
+                        className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 border-accent-purple rounded-sm cursor-sw-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'sw')}
+                        onTouchStart={(e) => handleResizeStart(e, 'sw')}
+                      />
+                      <div
+                        className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-accent-purple rounded-sm cursor-se-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'se')}
+                        onTouchStart={(e) => handleResizeStart(e, 'se')}
+                      />
+
+                      {/* Edge resize handles */}
+                      <div
+                        className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-3 bg-white border-2 border-accent-purple rounded-sm cursor-n-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'n')}
+                        onTouchStart={(e) => handleResizeStart(e, 'n')}
+                      />
+                      <div
+                        className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-8 h-3 bg-white border-2 border-accent-purple rounded-sm cursor-s-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 's')}
+                        onTouchStart={(e) => handleResizeStart(e, 's')}
+                      />
+                      <div
+                        className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-8 bg-white border-2 border-accent-purple rounded-sm cursor-w-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'w')}
+                        onTouchStart={(e) => handleResizeStart(e, 'w')}
+                      />
+                      <div
+                        className="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-8 bg-white border-2 border-accent-purple rounded-sm cursor-e-resize hover:bg-accent-purple hover:scale-110 transition-all"
+                        onMouseDown={(e) => handleResizeStart(e, 'e')}
+                        onTouchStart={(e) => handleResizeStart(e, 'e')}
+                      />
+
+                      {/* Dimensions label */}
+                      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 text-xs text-white bg-black/80 px-2 py-0.5 rounded whitespace-nowrap">
+                        {cropBox.width.toFixed(0)}% × {cropBox.height.toFixed(0)}%
+                        {editSettings.cropAspect !== 'free' && ` (${editSettings.cropAspect})`}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-dark-500">No image to edit</div>
+              )}
+            </div>
+
+            {/* Quick Edit Controls */}
+            <div className="space-y-4">
+              {/* Transform Section */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-dark-400 uppercase tracking-wider">Transform</h4>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => rotateImage(-90)}
+                    className="flex-1 btn-secondary py-2 text-sm"
+                    title="Rotate Left"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => rotateImage(90)}
+                    className="flex-1 btn-secondary py-2 text-sm"
+                    title="Rotate Right"
+                  >
+                    <RotateCw className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => flipImage('horizontal')}
+                    className={`flex-1 btn-secondary py-2 text-sm ${editSettings.flipH ? 'bg-accent-purple/20 text-accent-purple' : ''}`}
+                    title="Flip Horizontal"
+                  >
+                    <FlipHorizontal className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => flipImage('vertical')}
+                    className={`flex-1 btn-secondary py-2 text-sm ${editSettings.flipV ? 'bg-accent-purple/20 text-accent-purple' : ''}`}
+                    title="Flip Vertical"
+                  >
+                    <FlipVertical className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scale Slider */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-medium text-dark-400 uppercase tracking-wider">Scale</h4>
+                  <span className="text-xs text-dark-300">{editSettings.scale}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ZoomOut className="w-4 h-4 text-dark-400" />
+                  <input
+                    type="range"
+                    min="25"
+                    max="200"
+                    value={editSettings.scale}
+                    onChange={(e) => updateEditSetting('scale', parseInt(e.target.value))}
+                    className="flex-1 accent-accent-purple"
+                  />
+                  <ZoomIn className="w-4 h-4 text-dark-400" />
+                </div>
+              </div>
+
+              {/* Crop Aspect Ratio */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-dark-400 uppercase tracking-wider">Crop Ratio</h4>
+                <div className="flex flex-wrap gap-1">
+                  {CROP_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => updateCropAspect(preset.id)}
+                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                        editSettings.cropAspect === preset.id
+                          ? 'bg-accent-purple text-white'
+                          : 'bg-dark-600 text-dark-300 hover:bg-dark-500'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-dark-500 flex items-center gap-1">
+                    <Move className="w-3 h-3" />
+                    Drag corners to resize, drag center to move.
+                  </p>
+                  <p className={`text-xs flex items-center gap-1 ${shiftHeld ? 'text-accent-purple font-medium' : 'text-dark-500'}`}>
+                    {shiftHeld ? '⚡ Free movement active' : '💡 Hold Shift for free movement (no snap)'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Brightness */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-medium text-dark-400 uppercase tracking-wider">Brightness</h4>
+                  <span className="text-xs text-dark-300">{editSettings.brightness}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <SunMedium className="w-4 h-4 text-dark-400" />
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    value={editSettings.brightness}
+                    onChange={(e) => updateEditSetting('brightness', parseInt(e.target.value))}
+                    className="flex-1 accent-accent-purple"
+                  />
+                </div>
+              </div>
+
+              {/* Contrast */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-medium text-dark-400 uppercase tracking-wider">Contrast</h4>
+                  <span className="text-xs text-dark-300">{editSettings.contrast}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Contrast className="w-4 h-4 text-dark-400" />
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    value={editSettings.contrast}
+                    onChange={(e) => updateEditSetting('contrast', parseInt(e.target.value))}
+                    className="flex-1 accent-accent-purple"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-2">
+                {/* Restore Original - only show if edits exist */}
+                {post.originalImage && post.image !== post.originalImage && (
+                  <button
+                    onClick={restoreOriginal}
+                    className="w-full btn-secondary py-2 text-sm text-amber-400 border-amber-400/30 hover:bg-amber-400/10"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                    Restore Original Photo
+                  </button>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={resetEdits}
+                    className="btn-secondary py-2 text-sm"
+                    title="Reset crop to full image"
+                  >
+                    <Undo2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={cancelQuickEdit}
+                    className="flex-1 btn-secondary py-2 text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveQuickEdit}
+                    disabled={saving}
+                    className="flex-1 btn-primary py-2 text-sm"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Save
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </button>
+        ) : (
+          // Normal View Mode
+          <>
+            {post.image ? (
+              <img
+                src={post.image}
+                alt={post.caption || 'Post preview'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center"
+                style={{ backgroundColor: post.color || '#3f3f46' }}
+              >
+                <Image className="w-16 h-16 text-white/30" />
+              </div>
+            )}
+
+            {/* Edit Overlay */}
+            <div className="absolute inset-0 bg-black/0 hover:bg-black/50 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={startQuickEdit}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors"
+                >
+                  <Crop className="w-4 h-4 text-white" />
+                  <span className="text-white font-medium">Quick Edit</span>
+                </button>
+                <button
+                  onClick={() => navigate('/editor', { state: { postId: post.id } })}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors"
+                >
+                  <Edit3 className="w-4 h-4 text-white" />
+                  <span className="text-white font-medium">Full Editor</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Details */}
@@ -614,7 +1547,7 @@ function PostDetails({ post }) {
         {PLATFORMS.map((platform) => (
           <button
             key={platform.id}
-            onClick={() => setActiveTab(platform.id)}
+            onClick={() => handleTabChange(platform.id)}
             className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
               activeTab === platform.id
                 ? 'text-accent-purple border-b-2 border-accent-purple bg-accent-purple/5'

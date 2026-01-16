@@ -305,8 +305,8 @@ function GridPlanner() {
     setActiveId(null);
   }, []);
 
-  const activePost = activeId ? gridPosts.find((p) => p.id === activeId) : null;
-  const selectedPost = selectedPostId ? gridPosts.find((p) => p.id === selectedPostId) : null;
+  const activePost = activeId ? gridPosts.find((p) => p.id === activeId || p._id === activeId) : null;
+  const selectedPost = selectedPostId ? gridPosts.find((p) => p.id === selectedPostId || p._id === selectedPostId) : null;
   const currentLayout = GRID_LAYOUTS.find((l) => l.id === activeLayout);
   const currentGrid = grids.find(g => g._id === currentGridId);
 

@@ -58,10 +58,12 @@ export const useAppStore = create(
         posts: [{ ...post, id: post.id || crypto.randomUUID(), createdAt: Date.now() }, ...state.posts]
       })),
       updatePost: (id, updates) => set((state) => ({
-        posts: state.posts.map((p) => p.id === id ? { ...p, ...updates } : p)
+        posts: state.posts.map((p) => (p.id === id || p._id === id) ? { ...p, ...updates } : p),
+        // Also update gridPosts if the post exists there
+        gridPosts: state.gridPosts.map((p) => (p.id === id || p._id === id) ? { ...p, ...updates } : p)
       })),
       deletePost: (id) => set((state) => ({
-        posts: state.posts.filter((p) => p.id !== id),
+        posts: state.posts.filter((p) => p.id !== id && p._id !== id),
         selectedPostId: state.selectedPostId === id ? null : state.selectedPostId
       })),
       selectPost: (id) => set({ selectedPostId: id }),

@@ -10,6 +10,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Youtube,
 } from 'lucide-react';
 
 // Custom magic wand logo icon for creator-magician brand
@@ -51,6 +52,7 @@ function MagicWandLogo({ className }) {
 
 const navItems = [
   { path: '/grid', icon: LayoutGrid, label: 'Grid Planner' },
+  { path: '/youtube', icon: Youtube, label: 'YouTube Planner' },
   { path: '/editor', icon: Image, label: 'Quick Editor' },
   { path: '/editor/pro', icon: Wand2, label: 'Pro Editor' },
   { path: '/calendar', icon: CalendarDays, label: 'Calendar' },

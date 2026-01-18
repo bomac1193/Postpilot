@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authApi } from '../lib/api';
+import { useAppStore } from '../stores/useAppStore';
 import { Loader2, Mail, Lock, LogIn, UserPlus } from 'lucide-react';
 
 // Google icon SVG component
@@ -28,6 +29,7 @@ const GoogleIcon = () => (
 function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const setUser = useAppStore((state) => state.setUser);
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -47,10 +49,20 @@ function Login() {
     const message = searchParams.get('message');
 
     if (googleStatus === 'success' && token) {
-      // Store token and redirect
+      // Store token and fetch user data
       localStorage.setItem('token', token);
       setSuccess('Google login successful! Redirecting...');
-      setTimeout(() => navigate('/grid'), 1000);
+
+      // Fetch user profile and update store
+      authApi.getMe()
+        .then((userData) => {
+          setUser(userData.user || userData);
+          navigate('/grid');
+        })
+        .catch((err) => {
+          console.error('Failed to fetch user data:', err);
+          navigate('/grid'); // Navigate anyway, user can be fetched later
+        });
     } else if (googleStatus === 'error') {
       if (message === 'credentials_missing') {
         setError('Google OAuth is not configured. Please set up Google credentials.');
@@ -58,7 +70,7 @@ function Login() {
         setError('Google login failed. Please try again.');
       }
     }
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, setUser]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -73,6 +85,17 @@ function Login() {
         // After registration, log in
         await authApi.login(formData.email, formData.password);
       }
+
+      // Fetch user profile and update store
+      try {
+        const userData = await authApi.getMe();
+        setUser(userData.user || userData);
+      } catch (profileErr) {
+        console.error('Failed to fetch user profile:', profileErr);
+        // Set basic user info from form data
+        setUser({ email: formData.email, name: formData.name || formData.email.split('@')[0] });
+      }
+
       navigate('/grid');
     } catch (err) {
       console.error('Auth error:', err);

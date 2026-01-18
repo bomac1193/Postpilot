@@ -15,6 +15,7 @@ const getActualZoom = (val) => val <= 1 ? val : val * val;
 
 const pageTitles = {
   '/grid': 'Grid Planner',
+  '/youtube': 'YouTube Planner',
   '/editor': 'Quick Editor',
   '/editor/pro': 'Pro Editor',
   '/calendar': 'Content Calendar',

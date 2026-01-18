@@ -33,6 +33,24 @@ export const useAppStore = create(
       reels: [],
       reelOrder: [], // Persisted array of reel IDs for custom ordering
 
+      // YouTube Planner
+      youtubeVideos: [],
+      youtubeViewMode: 'grid', // 'grid' | 'sidebar'
+      selectedYoutubeVideoId: null,
+      youtubeCompetitors: [],
+      youtubeChannelSettings: {
+        channelName: 'Your Channel',
+        channelAvatar: null,
+        useSharedProfile: false, // Use same name/avatar as IG/TikTok
+      },
+      // YouTube Collections
+      youtubeCollections: [
+        { id: 'default', name: 'My Videos', createdAt: new Date().toISOString() }
+      ],
+      currentYoutubeCollectionId: 'default',
+      // Videos stored by collection ID for persistence
+      youtubeVideosByCollection: { default: [] },
+
       // Platform connections
       connectedPlatforms: {
         instagram: { connected: false, account: null },
@@ -143,6 +161,176 @@ export const useAppStore = create(
         reelOrder: reels.map(r => r._id || r.id)
       }),
 
+      // YouTube Planner actions
+      setYoutubeVideos: (videos) => set({ youtubeVideos: videos }),
+      addYoutubeVideo: (video) => set((state) => ({
+        youtubeVideos: [...state.youtubeVideos, {
+          ...video,
+          id: video.id || crypto.randomUUID(),
+          createdAt: video.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          position: state.youtubeVideos.length,
+        }]
+      })),
+      updateYoutubeVideo: (id, updates) => set((state) => ({
+        youtubeVideos: state.youtubeVideos.map(v =>
+          v.id === id ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v
+        )
+      })),
+      deleteYoutubeVideo: (id) => set((state) => ({
+        youtubeVideos: state.youtubeVideos.filter(v => v.id !== id),
+        selectedYoutubeVideoId: state.selectedYoutubeVideoId === id ? null : state.selectedYoutubeVideoId
+      })),
+      reorderYoutubeVideos: (videos) => set({
+        youtubeVideos: videos.map((v, i) => ({ ...v, position: i }))
+      }),
+      selectYoutubeVideo: (id) => set({ selectedYoutubeVideoId: id }),
+      setYoutubeViewMode: (mode) => set({ youtubeViewMode: mode }),
+
+      // YouTube Competitors actions
+      setYoutubeCompetitors: (competitors) => set({ youtubeCompetitors: competitors }),
+      addYoutubeCompetitor: (competitor) => set((state) => ({
+        youtubeCompetitors: [...state.youtubeCompetitors, {
+          ...competitor,
+          id: competitor.id || crypto.randomUUID(),
+        }]
+      })),
+      updateYoutubeCompetitor: (id, updates) => set((state) => ({
+        youtubeCompetitors: state.youtubeCompetitors.map(c =>
+          c.id === id ? { ...c, ...updates } : c
+        )
+      })),
+      deleteYoutubeCompetitor: (id) => set((state) => ({
+        youtubeCompetitors: state.youtubeCompetitors.filter(c => c.id !== id)
+      })),
+      reorderYoutubeCompetitors: (competitors) => set({ youtubeCompetitors: competitors }),
+
+      // YouTube Collections actions
+      setYoutubeCollections: (collections) => set({ youtubeCollections: collections }),
+      addYoutubeCollection: (name) => set((state) => {
+        const newCollection = {
+          id: crypto.randomUUID(),
+          name: name || 'New Collection',
+          createdAt: new Date().toISOString(),
+        };
+        // Save current collection's videos before switching
+        const updatedVideosByCollection = {
+          ...state.youtubeVideosByCollection,
+          [state.currentYoutubeCollectionId]: state.youtubeVideos,
+          [newCollection.id]: [], // Initialize empty array for new collection
+        };
+        return {
+          youtubeCollections: [...state.youtubeCollections, newCollection],
+          currentYoutubeCollectionId: newCollection.id,
+          youtubeVideos: [], // Start fresh for new collection
+          youtubeVideosByCollection: updatedVideosByCollection,
+          selectedYoutubeVideoId: null,
+        };
+      }),
+      renameYoutubeCollection: (id, name) => set((state) => ({
+        youtubeCollections: state.youtubeCollections.map(c =>
+          c.id === id ? { ...c, name } : c
+        )
+      })),
+      duplicateYoutubeCollection: (id) => set((state) => {
+        const sourceCollection = state.youtubeCollections.find(c => c.id === id);
+        if (!sourceCollection) return state;
+
+        const newId = crypto.randomUUID();
+        const newCollection = {
+          id: newId,
+          name: `${sourceCollection.name} (Copy)`,
+          createdAt: new Date().toISOString(),
+        };
+
+        // Get videos from source collection
+        const sourceVideos = id === state.currentYoutubeCollectionId
+          ? state.youtubeVideos
+          : (state.youtubeVideosByCollection[id] || []);
+
+        // Deep copy videos with new IDs
+        const duplicatedVideos = sourceVideos.map(v => ({
+          ...v,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        }));
+
+        // Save current videos before switching
+        const updatedVideosByCollection = {
+          ...state.youtubeVideosByCollection,
+          [state.currentYoutubeCollectionId]: state.youtubeVideos,
+          [newId]: duplicatedVideos,
+        };
+
+        return {
+          youtubeCollections: [...state.youtubeCollections, newCollection],
+          currentYoutubeCollectionId: newId,
+          youtubeVideos: duplicatedVideos,
+          youtubeVideosByCollection: updatedVideosByCollection,
+          selectedYoutubeVideoId: null,
+        };
+      }),
+      deleteYoutubeCollection: (id) => set((state) => {
+        // Can't delete the last collection
+        if (state.youtubeCollections.length <= 1) return state;
+
+        const newCollections = state.youtubeCollections.filter(c => c.id !== id);
+        const wasCurrentCollection = state.currentYoutubeCollectionId === id;
+        const newCurrentId = wasCurrentCollection
+          ? newCollections[0]?.id || 'default'
+          : state.currentYoutubeCollectionId;
+
+        // Remove deleted collection from videos map
+        const { [id]: _, ...remainingVideosByCollection } = state.youtubeVideosByCollection;
+
+        return {
+          youtubeCollections: newCollections,
+          currentYoutubeCollectionId: newCurrentId,
+          youtubeVideos: wasCurrentCollection
+            ? (remainingVideosByCollection[newCurrentId] || [])
+            : state.youtubeVideos,
+          youtubeVideosByCollection: remainingVideosByCollection,
+          selectedYoutubeVideoId: wasCurrentCollection ? null : state.selectedYoutubeVideoId,
+        };
+      }),
+      setCurrentYoutubeCollection: (id) => set((state) => {
+        // Save current collection's videos before switching
+        const updatedVideosByCollection = {
+          ...state.youtubeVideosByCollection,
+          [state.currentYoutubeCollectionId]: state.youtubeVideos,
+        };
+        return {
+          currentYoutubeCollectionId: id,
+          youtubeVideos: updatedVideosByCollection[id] || [],
+          youtubeVideosByCollection: updatedVideosByCollection,
+          selectedYoutubeVideoId: null,
+        };
+      }),
+      // Save current videos to collection (call before switching or on unmount)
+      saveCurrentYoutubeCollectionVideos: () => set((state) => ({
+        youtubeVideosByCollection: {
+          ...state.youtubeVideosByCollection,
+          [state.currentYoutubeCollectionId]: state.youtubeVideos,
+        }
+      })),
+
+      // YouTube Channel Settings actions
+      setYoutubeChannelSettings: (settings) => set((state) => ({
+        youtubeChannelSettings: { ...state.youtubeChannelSettings, ...settings }
+      })),
+      updateYoutubeChannelAvatar: (avatar) => set((state) => ({
+        youtubeChannelSettings: { ...state.youtubeChannelSettings, channelAvatar: avatar }
+      })),
+      updateYoutubeChannelName: (name) => set((state) => ({
+        youtubeChannelSettings: { ...state.youtubeChannelSettings, channelName: name }
+      })),
+      toggleYoutubeUseSharedProfile: () => set((state) => ({
+        youtubeChannelSettings: {
+          ...state.youtubeChannelSettings,
+          useSharedProfile: !state.youtubeChannelSettings.useSharedProfile
+        }
+      })),
+
       // Calendar actions
       setScheduledPosts: (posts) => set({ scheduledPosts: posts }),
       schedulePost: (post, date) => set((state) => ({
@@ -179,6 +367,52 @@ export const useAppStore = create(
     }),
     {
       name: 'postpilot-storage',
+      storage: {
+        getItem: (name) => {
+          try {
+            const str = localStorage.getItem(name);
+            return str ? JSON.parse(str) : null;
+          } catch (e) {
+            console.error('Failed to load from localStorage:', e);
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch (e) {
+            console.error('Failed to save to localStorage:', e);
+            // If quota exceeded, try to clear old data and retry
+            if (e.name === 'QuotaExceededError' || e.code === 22) {
+              console.warn('localStorage quota exceeded, attempting to clear space...');
+              try {
+                // Try to save without YouTube thumbnails as fallback
+                const reducedValue = {
+                  ...value,
+                  state: {
+                    ...value.state,
+                    youtubeVideos: value.state?.youtubeVideos?.map(v => ({
+                      ...v,
+                      thumbnail: null // Remove thumbnails if quota exceeded
+                    })) || []
+                  }
+                };
+                localStorage.setItem(name, JSON.stringify(reducedValue));
+                console.warn('Saved without thumbnails due to storage limit');
+              } catch (e2) {
+                console.error('Failed to save even without thumbnails:', e2);
+              }
+            }
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name);
+          } catch (e) {
+            console.error('Failed to remove from localStorage:', e);
+          }
+        },
+      },
       partialize: (state) => ({
         theme: state.theme,
         posts: state.posts,
@@ -189,6 +423,15 @@ export const useAppStore = create(
         isAuthenticated: state.isAuthenticated,
         // Reel order for custom sorting
         reelOrder: state.reelOrder,
+        // YouTube Planner data
+        youtubeVideos: state.youtubeVideos,
+        youtubeViewMode: state.youtubeViewMode,
+        youtubeCompetitors: state.youtubeCompetitors,
+        youtubeChannelSettings: state.youtubeChannelSettings,
+        // YouTube Collections
+        youtubeCollections: state.youtubeCollections,
+        currentYoutubeCollectionId: state.currentYoutubeCollectionId,
+        youtubeVideosByCollection: state.youtubeVideosByCollection,
       }),
       // Custom merge to ensure persisted data takes precedence
       merge: (persistedState, currentState) => ({
@@ -197,6 +440,15 @@ export const useAppStore = create(
         // Ensure user data is preserved if it exists in persisted state
         user: persistedState?.user || currentState.user,
         isAuthenticated: persistedState?.isAuthenticated || currentState.isAuthenticated,
+        // Ensure YouTube data is preserved
+        youtubeVideos: persistedState?.youtubeVideos || currentState.youtubeVideos,
+        youtubeViewMode: persistedState?.youtubeViewMode || currentState.youtubeViewMode,
+        youtubeCompetitors: persistedState?.youtubeCompetitors || currentState.youtubeCompetitors,
+        youtubeChannelSettings: persistedState?.youtubeChannelSettings || currentState.youtubeChannelSettings,
+        // Ensure YouTube Collections are preserved
+        youtubeCollections: persistedState?.youtubeCollections || currentState.youtubeCollections,
+        currentYoutubeCollectionId: persistedState?.currentYoutubeCollectionId || currentState.currentYoutubeCollectionId,
+        youtubeVideosByCollection: persistedState?.youtubeVideosByCollection || currentState.youtubeVideosByCollection,
       }),
     }
   )

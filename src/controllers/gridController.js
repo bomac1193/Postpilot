@@ -306,47 +306,55 @@ exports.reorderContent = async (req, res) => {
 
     // New format: items is array of { contentId, position } representing the new order
     if (items && Array.isArray(items)) {
-      const cols = grid.settings?.columns || 3;
+      const cols = grid.columns || 3;
 
-      // Clear all cells first
-      for (const cell of grid.cells) {
-        cell.contentId = null;
-        cell.isEmpty = true;
+      // Build a map of new positions: position -> contentId
+      const newPositions = new Map();
+      for (const item of items) {
+        if (item.contentId) {
+          newPositions.set(item.position, item.contentId);
+        }
       }
 
-      // Place content in new positions
-      for (const item of items) {
-        const position = item.position;
+      // Update each cell based on its position
+      for (const cell of grid.cells) {
+        const cellPosition = cell.position.row * cols + cell.position.col;
+
+        if (newPositions.has(cellPosition)) {
+          cell.contentId = newPositions.get(cellPosition);
+          cell.isEmpty = false;
+        } else {
+          cell.contentId = null;
+          cell.isEmpty = true;
+        }
+      }
+
+      // Ensure cells exist for all positions that have content
+      for (const [position, contentId] of newPositions) {
         const row = Math.floor(position / cols);
         const col = position % cols;
 
-        // Find or create the cell at this position
-        let cell = grid.cells.find(c => c.position.row === row && c.position.col === col);
-
-        if (!cell) {
-          // Create new cell if needed
-          cell = {
+        const existingCell = grid.cells.find(c => c.position.row === row && c.position.col === col);
+        if (!existingCell) {
+          grid.cells.push({
             position: { row, col },
-            contentId: null,
-            isEmpty: true,
+            contentId: contentId,
+            isEmpty: false,
             crop: { ...DEFAULT_CROP }
-          };
-          grid.cells.push(cell);
-        }
-
-        if (item.contentId) {
-          cell.contentId = item.contentId;
-          cell.isEmpty = false;
+          });
         }
       }
 
       // Update row count if needed
-      const maxRow = Math.max(...items.map(i => Math.floor(i.position / cols)));
-      if (!grid.settings) {
-        grid.settings = { columns: cols, rows: maxRow + 1 };
-      } else if (maxRow + 1 > (grid.settings.rows || 0)) {
-        grid.settings.rows = maxRow + 1;
+      const maxRow = items.length > 0
+        ? Math.max(...items.map(i => Math.floor(i.position / cols)))
+        : 0;
+      if (maxRow + 1 > grid.totalRows) {
+        grid.totalRows = maxRow + 1;
       }
+
+      // Mark cells as modified for Mongoose to detect changes
+      grid.markModified('cells');
     }
     // Legacy format: moves is array of { from: {row, col}, to: {row, col} }
     else if (moves && Array.isArray(moves)) {

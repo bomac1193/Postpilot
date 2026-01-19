@@ -5,6 +5,7 @@ import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import GridPlanner from './pages/GridPlanner';
 import YouTubePlanner from './pages/YouTubePlanner';
+import RolloutPlanner from './pages/RolloutPlanner';
 import QuickEditor from './pages/QuickEditor';
 import ProEditor from './pages/ProEditor';
 import Calendar from './pages/Calendar';
@@ -52,6 +53,7 @@ function App() {
           <Route index element={<Navigate to="/grid" replace />} />
           <Route path="grid" element={<GridPlanner />} />
           <Route path="youtube" element={<YouTubePlanner />} />
+          <Route path="rollout" element={<RolloutPlanner />} />
           <Route path="editor" element={<QuickEditor />} />
           <Route path="editor/pro" element={<ProEditor />} />
           <Route path="calendar" element={<Calendar />} />

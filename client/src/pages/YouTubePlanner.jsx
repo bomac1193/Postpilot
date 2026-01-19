@@ -22,7 +22,24 @@ import {
   X,
   FolderOpen,
   Copy,
+  Palette,
+  Link2,
+  Unlink,
 } from 'lucide-react';
+
+// Preset colors for collections
+const COLLECTION_COLORS = [
+  { id: 'purple', value: '#8b5cf6', name: 'Purple' },
+  { id: 'blue', value: '#3b82f6', name: 'Blue' },
+  { id: 'green', value: '#10b981', name: 'Green' },
+  { id: 'orange', value: '#f97316', name: 'Orange' },
+  { id: 'pink', value: '#ec4899', name: 'Pink' },
+  { id: 'indigo', value: '#6366f1', name: 'Indigo' },
+  { id: 'teal', value: '#14b8a6', name: 'Teal' },
+  { id: 'amber', value: '#f59e0b', name: 'Amber' },
+  { id: 'red', value: '#ef4444', name: 'Red' },
+  { id: 'cyan', value: '#06b6d4', name: 'Cyan' },
+];
 
 function YouTubePlanner() {
   const youtubeVideos = useAppStore((state) => state.youtubeVideos);
@@ -41,6 +58,12 @@ function YouTubePlanner() {
   const deleteYoutubeCollection = useAppStore((state) => state.deleteYoutubeCollection);
   const setCurrentYoutubeCollection = useAppStore((state) => state.setCurrentYoutubeCollection);
   const setYoutubeVideos = useAppStore((state) => state.setYoutubeVideos);
+  const updateCollectionColor = useAppStore((state) => state.updateCollectionColor);
+  const assignCollectionToRollout = useAppStore((state) => state.assignCollectionToRollout);
+  const unassignCollectionFromRollout = useAppStore((state) => state.unassignCollectionFromRollout);
+
+  // Rollouts for assignment
+  const rollouts = useAppStore((state) => state.rollouts);
 
   const [isLocked, setIsLocked] = useState(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -53,6 +76,8 @@ function YouTubePlanner() {
   const [showCollectionsDropdown, setShowCollectionsDropdown] = useState(false);
   const [editingCollectionId, setEditingCollectionId] = useState(null);
   const [editingCollectionName, setEditingCollectionName] = useState('');
+  const [showColorPickerFor, setShowColorPickerFor] = useState(null);
+  const [showRolloutPickerFor, setShowRolloutPickerFor] = useState(null);
   const collectionsDropdownRef = useRef(null);
 
   // Get videos by collection for showing counts
@@ -132,6 +157,37 @@ function YouTubePlanner() {
       deleteYoutubeCollection(collectionId);
     }
   }, [youtubeCollections, deleteYoutubeCollection]);
+
+  // Handle color selection
+  const handleColorSelect = useCallback((e, collectionId, color) => {
+    e.stopPropagation();
+    updateCollectionColor(collectionId, color);
+    setShowColorPickerFor(null);
+  }, [updateCollectionColor]);
+
+  // Handle rollout assignment
+  const handleAssignToRollout = useCallback((e, collectionId, rolloutId, sectionId) => {
+    e.stopPropagation();
+    assignCollectionToRollout(collectionId, rolloutId, sectionId);
+    setShowRolloutPickerFor(null);
+  }, [assignCollectionToRollout]);
+
+  // Handle unassign from rollout
+  const handleUnassignFromRollout = useCallback((e, collectionId) => {
+    e.stopPropagation();
+    unassignCollectionFromRollout(collectionId);
+    setShowRolloutPickerFor(null);
+  }, [unassignCollectionFromRollout]);
+
+  // Get rollout and section info for a collection
+  const getCollectionRolloutInfo = useCallback((collection) => {
+    if (!collection.rolloutId || !collection.sectionId) return null;
+    const rollout = rollouts.find(r => r.id === collection.rolloutId);
+    if (!rollout) return null;
+    const section = rollout.sections.find(s => s.id === collection.sectionId);
+    if (!section) return null;
+    return { rollout, section };
+  }, [rollouts]);
 
   const selectedVideo = selectedYoutubeVideoId
     ? youtubeVideos.find((v) => v.id === selectedYoutubeVideoId)
@@ -345,72 +401,200 @@ function YouTubePlanner() {
 
               {/* Dropdown Menu */}
               {showCollectionsDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                  <div className="max-h-64 overflow-y-auto">
-                    {youtubeCollections?.map((collection) => (
-                      <div
-                        key={collection.id}
-                        onClick={() => handleSwitchCollection(collection.id)}
-                        className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
-                          collection.id === currentYoutubeCollectionId
-                            ? 'bg-red-500/20 text-red-400'
-                            : 'hover:bg-dark-700 text-dark-200'
-                        }`}
-                      >
-                        {editingCollectionId === collection.id ? (
-                          <div className="flex-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="text"
-                              value={editingCollectionName}
-                              onChange={(e) => setEditingCollectionName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveRename(e);
-                                if (e.key === 'Escape') handleCancelRename(e);
-                              }}
-                              className="flex-1 bg-dark-900 border border-dark-600 rounded px-2 py-1 text-sm text-dark-100 focus:outline-none focus:border-red-500"
-                              autoFocus
-                            />
-                            <button onClick={handleSaveRename} className="p-1 text-green-400 hover:bg-dark-600 rounded">
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={handleCancelRename} className="p-1 text-dark-400 hover:bg-dark-600 rounded">
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <FolderOpen className="w-4 h-4 flex-shrink-0" />
-                            <span className="flex-1 text-sm truncate">{collection.name}</span>
-                            <span className="text-xs text-dark-500">
-                              {collection.id === currentYoutubeCollectionId ? youtubeVideos.length : (youtubeVideosByCollection?.[collection.id]?.length || 0)}
-                            </span>
-                            <button
-                              onClick={(e) => handleStartRename(e, collection)}
-                              className="p-1 text-dark-500 hover:text-dark-200 hover:bg-dark-600 rounded"
-                              title="Rename"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={(e) => handleDuplicateCollection(e, collection.id)}
-                              className="p-1 text-dark-500 hover:text-dark-200 hover:bg-dark-600 rounded"
-                              title="Duplicate"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                            {youtubeCollections.length > 1 && (
-                              <button
-                                onClick={(e) => handleDeleteCollection(e, collection.id)}
-                                className="p-1 text-dark-500 hover:text-red-400 hover:bg-dark-600 rounded"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                <div className="absolute top-full left-0 mt-1 w-80 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto">
+                    {youtubeCollections?.map((collection) => {
+                      const rolloutInfo = getCollectionRolloutInfo(collection);
+                      return (
+                        <div
+                          key={collection.id}
+                          className={`relative ${
+                            collection.id === currentYoutubeCollectionId
+                              ? 'bg-red-500/20'
+                              : 'hover:bg-dark-700'
+                          }`}
+                        >
+                          <div
+                            onClick={() => handleSwitchCollection(collection.id)}
+                            className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
+                              collection.id === currentYoutubeCollectionId
+                                ? 'text-red-400'
+                                : 'text-dark-200'
+                            }`}
+                          >
+                            {editingCollectionId === collection.id ? (
+                              <div className="flex-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  value={editingCollectionName}
+                                  onChange={(e) => setEditingCollectionName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveRename(e);
+                                    if (e.key === 'Escape') handleCancelRename(e);
+                                  }}
+                                  className="flex-1 bg-dark-900 border border-dark-600 rounded px-2 py-1 text-sm text-dark-100 focus:outline-none focus:border-red-500"
+                                  autoFocus
+                                />
+                                <button onClick={handleSaveRename} className="p-1 text-green-400 hover:bg-dark-600 rounded">
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={handleCancelRename} className="p-1 text-dark-400 hover:bg-dark-600 rounded">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                {/* Color dot */}
+                                <div
+                                  className="w-3 h-3 rounded-full flex-shrink-0 border border-dark-500"
+                                  style={{ backgroundColor: collection.color || '#6b7280' }}
+                                />
+                                <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                                <span className="flex-1 text-sm truncate">{collection.name}</span>
+                                <span className="text-xs text-dark-500">
+                                  {collection.id === currentYoutubeCollectionId ? youtubeVideos.length : (youtubeVideosByCollection?.[collection.id]?.length || 0)}
+                                </span>
+                                {/* Color picker button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowColorPickerFor(showColorPickerFor === collection.id ? null : collection.id);
+                                    setShowRolloutPickerFor(null);
+                                  }}
+                                  className="p-1 text-dark-500 hover:text-dark-200 hover:bg-dark-600 rounded"
+                                  title="Set Color"
+                                >
+                                  <Palette className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Rollout assignment button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowRolloutPickerFor(showRolloutPickerFor === collection.id ? null : collection.id);
+                                    setShowColorPickerFor(null);
+                                  }}
+                                  className={`p-1 hover:bg-dark-600 rounded ${
+                                    collection.rolloutId ? 'text-green-400' : 'text-dark-500 hover:text-dark-200'
+                                  }`}
+                                  title={collection.rolloutId ? 'Change Rollout' : 'Assign to Rollout'}
+                                >
+                                  {collection.rolloutId ? <Link2 className="w-3.5 h-3.5" /> : <Unlink className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  onClick={(e) => handleStartRename(e, collection)}
+                                  className="p-1 text-dark-500 hover:text-dark-200 hover:bg-dark-600 rounded"
+                                  title="Rename"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => handleDuplicateCollection(e, collection.id)}
+                                  className="p-1 text-dark-500 hover:text-dark-200 hover:bg-dark-600 rounded"
+                                  title="Duplicate"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                {youtubeCollections.length > 1 && (
+                                  <button
+                                    onClick={(e) => handleDeleteCollection(e, collection.id)}
+                                    className="p-1 text-dark-500 hover:text-red-400 hover:bg-dark-600 rounded"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
-                      </div>
-                    ))}
+                          </div>
+
+                          {/* Rollout info badge */}
+                          {rolloutInfo && (
+                            <div className="px-3 pb-2 -mt-1">
+                              <div
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                                style={{ backgroundColor: `${rolloutInfo.section.color}20`, color: rolloutInfo.section.color }}
+                              >
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: rolloutInfo.section.color }} />
+                                {rolloutInfo.rollout.name} → {rolloutInfo.section.name}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Color Picker Dropdown */}
+                          {showColorPickerFor === collection.id && (
+                            <div className="absolute left-full top-0 ml-1 w-36 bg-dark-900 border border-dark-600 rounded-lg shadow-xl z-50 p-2" onClick={(e) => e.stopPropagation()}>
+                              <p className="text-xs text-dark-400 mb-2 px-1">Select Color</p>
+                              <div className="grid grid-cols-5 gap-1">
+                                {COLLECTION_COLORS.map((color) => (
+                                  <button
+                                    key={color.id}
+                                    onClick={(e) => handleColorSelect(e, collection.id, color.value)}
+                                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                                      collection.color === color.value ? 'border-white' : 'border-transparent'
+                                    }`}
+                                    style={{ backgroundColor: color.value }}
+                                    title={color.name}
+                                  />
+                                ))}
+                              </div>
+                              <button
+                                onClick={(e) => handleColorSelect(e, collection.id, null)}
+                                className="w-full mt-2 px-2 py-1 text-xs text-dark-400 hover:text-dark-200 hover:bg-dark-700 rounded"
+                              >
+                                Clear Color
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Rollout Picker Dropdown */}
+                          {showRolloutPickerFor === collection.id && (
+                            <div className="absolute left-full top-0 ml-1 w-56 bg-dark-900 border border-dark-600 rounded-lg shadow-xl z-50 p-2 max-h-64 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                              <p className="text-xs text-dark-400 mb-2 px-1">Assign to Phase</p>
+                              {rollouts.length === 0 ? (
+                                <p className="text-xs text-dark-500 px-1">No rollouts created yet</p>
+                              ) : (
+                                rollouts.map((rollout) => (
+                                  <div key={rollout.id} className="mb-2">
+                                    <p className="text-xs font-medium text-dark-300 px-1 mb-1">{rollout.name}</p>
+                                    {rollout.sections.length === 0 ? (
+                                      <p className="text-xs text-dark-500 px-1 ml-2">No phases</p>
+                                    ) : (
+                                      rollout.sections.map((section) => (
+                                        <button
+                                          key={section.id}
+                                          onClick={(e) => handleAssignToRollout(e, collection.id, rollout.id, section.id)}
+                                          className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-dark-700 ${
+                                            collection.sectionId === section.id ? 'bg-dark-700' : ''
+                                          }`}
+                                        >
+                                          <span
+                                            className="w-3 h-3 rounded-full flex-shrink-0"
+                                            style={{ backgroundColor: section.color || '#6b7280' }}
+                                          />
+                                          <span className="text-xs text-dark-200 truncate">{section.name}</span>
+                                          {collection.sectionId === section.id && (
+                                            <Check className="w-3 h-3 text-green-400 ml-auto" />
+                                          )}
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                              {collection.rolloutId && (
+                                <button
+                                  onClick={(e) => handleUnassignFromRollout(e, collection.id)}
+                                  className="w-full mt-2 px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 rounded flex items-center gap-2"
+                                >
+                                  <Unlink className="w-3 h-3" />
+                                  Remove from Rollout
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   {/* Create New Collection */}
                   <div className="border-t border-dark-700">

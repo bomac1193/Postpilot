@@ -19,6 +19,8 @@ export const useAppStore = create(
       // Grid planner
       gridPosts: [],
       gridLayout: '3x3',
+      // Grid metadata (color and rollout assignments for backend grids)
+      gridMeta: {}, // { [gridId]: { color, rolloutId, sectionId } }
 
       // Editor state
       editorMode: 'quick', // 'quick' | 'pro'
@@ -45,11 +47,15 @@ export const useAppStore = create(
       },
       // YouTube Collections
       youtubeCollections: [
-        { id: 'default', name: 'My Videos', createdAt: new Date().toISOString() }
+        { id: 'default', name: 'My Videos', createdAt: new Date().toISOString(), tags: [], color: null, rolloutId: null, sectionId: null }
       ],
       currentYoutubeCollectionId: 'default',
       // Videos stored by collection ID for persistence
       youtubeVideosByCollection: { default: [] },
+
+      // Rollouts
+      rollouts: [],
+      currentRolloutId: null,
 
       // Platform connections
       connectedPlatforms: {
@@ -103,6 +109,36 @@ export const useAppStore = create(
         const [removed] = newGridPosts.splice(fromIndex, 1);
         newGridPosts.splice(toIndex, 0, removed);
         return { gridPosts: newGridPosts.map((p, i) => ({ ...p, gridPosition: i })) };
+      }),
+
+      // Grid metadata actions (for backend grids)
+      updateGridMeta: (gridId, meta) => set((state) => ({
+        gridMeta: {
+          ...state.gridMeta,
+          [gridId]: { ...state.gridMeta[gridId], ...meta }
+        }
+      })),
+      updateGridColor: (gridId, color) => set((state) => ({
+        gridMeta: {
+          ...state.gridMeta,
+          [gridId]: { ...state.gridMeta[gridId], color }
+        }
+      })),
+      assignGridToRollout: (gridId, rolloutId, sectionId) => set((state) => ({
+        gridMeta: {
+          ...state.gridMeta,
+          [gridId]: { ...state.gridMeta[gridId], rolloutId, sectionId }
+        }
+      })),
+      unassignGridFromRollout: (gridId) => set((state) => ({
+        gridMeta: {
+          ...state.gridMeta,
+          [gridId]: { ...state.gridMeta[gridId], rolloutId: null, sectionId: null }
+        }
+      })),
+      deleteGridMeta: (gridId) => set((state) => {
+        const { [gridId]: _, ...remaining } = state.gridMeta;
+        return { gridMeta: remaining };
       }),
 
       // Editor actions
@@ -212,6 +248,10 @@ export const useAppStore = create(
           id: crypto.randomUUID(),
           name: name || 'New Collection',
           createdAt: new Date().toISOString(),
+          tags: [],
+          color: null,
+          rolloutId: null,
+          sectionId: null,
         };
         // Save current collection's videos before switching
         const updatedVideosByCollection = {
@@ -241,6 +281,10 @@ export const useAppStore = create(
           id: newId,
           name: `${sourceCollection.name} (Copy)`,
           createdAt: new Date().toISOString(),
+          tags: [...(sourceCollection.tags || [])],
+          color: sourceCollection.color || null,
+          rolloutId: null, // Don't copy rollout assignment
+          sectionId: null,
         };
 
         // Get videos from source collection
@@ -331,6 +375,204 @@ export const useAppStore = create(
         }
       })),
 
+      // Collection tag actions
+      updateYoutubeCollectionTags: (collectionId, tags) => set((state) => ({
+        youtubeCollections: state.youtubeCollections.map(c =>
+          c.id === collectionId ? { ...c, tags } : c
+        )
+      })),
+      addTagToCollection: (collectionId, tag) => set((state) => ({
+        youtubeCollections: state.youtubeCollections.map(c =>
+          c.id === collectionId && !(c.tags || []).includes(tag)
+            ? { ...c, tags: [...(c.tags || []), tag] }
+            : c
+        )
+      })),
+      removeTagFromCollection: (collectionId, tag) => set((state) => ({
+        youtubeCollections: state.youtubeCollections.map(c =>
+          c.id === collectionId
+            ? { ...c, tags: (c.tags || []).filter(t => t !== tag) }
+            : c
+        )
+      })),
+
+      // Collection color and rollout assignment actions
+      updateCollectionColor: (collectionId, color) => set((state) => ({
+        youtubeCollections: state.youtubeCollections.map(c =>
+          c.id === collectionId ? { ...c, color } : c
+        )
+      })),
+      assignCollectionToRollout: (collectionId, rolloutId, sectionId) => set((state) => {
+        // First, remove from any existing section in any rollout
+        let updatedRollouts = state.rollouts.map(r => ({
+          ...r,
+          sections: r.sections.map(s => ({
+            ...s,
+            collectionIds: s.collectionIds.filter(id => id !== collectionId)
+          }))
+        }));
+
+        // If assigning to a new section, add the collection there
+        if (rolloutId && sectionId) {
+          updatedRollouts = updatedRollouts.map(r =>
+            r.id === rolloutId
+              ? {
+                  ...r,
+                  sections: r.sections.map(s =>
+                    s.id === sectionId
+                      ? { ...s, collectionIds: [...s.collectionIds, collectionId] }
+                      : s
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : r
+          );
+        }
+
+        return {
+          youtubeCollections: state.youtubeCollections.map(c =>
+            c.id === collectionId ? { ...c, rolloutId, sectionId } : c
+          ),
+          rollouts: updatedRollouts,
+        };
+      }),
+      unassignCollectionFromRollout: (collectionId) => set((state) => {
+        const collection = state.youtubeCollections.find(c => c.id === collectionId);
+        if (!collection) return state;
+
+        return {
+          youtubeCollections: state.youtubeCollections.map(c =>
+            c.id === collectionId ? { ...c, rolloutId: null, sectionId: null } : c
+          ),
+          rollouts: state.rollouts.map(r => ({
+            ...r,
+            sections: r.sections.map(s => ({
+              ...s,
+              collectionIds: s.collectionIds.filter(id => id !== collectionId)
+            })),
+            updatedAt: new Date().toISOString(),
+          })),
+        };
+      }),
+
+      // Rollout actions
+      addRollout: (rollout) => set((state) => {
+        const newRollout = {
+          id: crypto.randomUUID(),
+          name: rollout?.name || 'Untitled Rollout',
+          description: rollout?.description || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: rollout?.status || 'draft',
+          sections: rollout?.sections || [],
+        };
+        return {
+          rollouts: [newRollout, ...state.rollouts],
+          currentRolloutId: newRollout.id,
+        };
+      }),
+      updateRollout: (id, updates) => set((state) => ({
+        rollouts: state.rollouts.map(r =>
+          r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+        )
+      })),
+      deleteRollout: (id) => set((state) => ({
+        rollouts: state.rollouts.filter(r => r.id !== id),
+        currentRolloutId: state.currentRolloutId === id ? null : state.currentRolloutId,
+      })),
+      setCurrentRollout: (id) => set({ currentRolloutId: id }),
+
+      // Rollout section actions
+      addRolloutSection: (rolloutId, section) => set((state) => {
+        const rollout = state.rollouts.find(r => r.id === rolloutId);
+        if (!rollout) return state;
+        // Default phase colors
+        const phaseColors = ['#8b5cf6', '#3b82f6', '#10b981', '#f97316', '#ec4899', '#6366f1', '#14b8a6', '#f59e0b'];
+        const newSection = {
+          id: crypto.randomUUID(),
+          name: section?.name || 'New Section',
+          order: rollout.sections.length,
+          collectionIds: section?.collectionIds || [],
+          color: section?.color || phaseColors[rollout.sections.length % phaseColors.length],
+        };
+        return {
+          rollouts: state.rollouts.map(r =>
+            r.id === rolloutId
+              ? { ...r, sections: [...r.sections, newSection], updatedAt: new Date().toISOString() }
+              : r
+          ),
+        };
+      }),
+      updateRolloutSection: (rolloutId, sectionId, updates) => set((state) => ({
+        rollouts: state.rollouts.map(r =>
+          r.id === rolloutId
+            ? {
+                ...r,
+                sections: r.sections.map(s => s.id === sectionId ? { ...s, ...updates } : s),
+                updatedAt: new Date().toISOString(),
+              }
+            : r
+        )
+      })),
+      deleteRolloutSection: (rolloutId, sectionId) => set((state) => ({
+        rollouts: state.rollouts.map(r =>
+          r.id === rolloutId
+            ? {
+                ...r,
+                sections: r.sections.filter(s => s.id !== sectionId).map((s, idx) => ({ ...s, order: idx })),
+                updatedAt: new Date().toISOString(),
+              }
+            : r
+        )
+      })),
+      reorderRolloutSections: (rolloutId, sourceIndex, targetIndex) => set((state) => {
+        const rollout = state.rollouts.find(r => r.id === rolloutId);
+        if (!rollout || sourceIndex === targetIndex) return state;
+        const sections = [...rollout.sections];
+        const [moved] = sections.splice(sourceIndex, 1);
+        sections.splice(targetIndex, 0, moved);
+        const reordered = sections.map((s, idx) => ({ ...s, order: idx }));
+        return {
+          rollouts: state.rollouts.map(r =>
+            r.id === rolloutId
+              ? { ...r, sections: reordered, updatedAt: new Date().toISOString() }
+              : r
+          ),
+        };
+      }),
+
+      // Collection in section actions
+      addCollectionToSection: (rolloutId, sectionId, collectionId) => set((state) => ({
+        rollouts: state.rollouts.map(r =>
+          r.id === rolloutId
+            ? {
+                ...r,
+                sections: r.sections.map(s =>
+                  s.id === sectionId && !s.collectionIds.includes(collectionId)
+                    ? { ...s, collectionIds: [...s.collectionIds, collectionId] }
+                    : s
+                ),
+                updatedAt: new Date().toISOString(),
+              }
+            : r
+        )
+      })),
+      removeCollectionFromSection: (rolloutId, sectionId, collectionId) => set((state) => ({
+        rollouts: state.rollouts.map(r =>
+          r.id === rolloutId
+            ? {
+                ...r,
+                sections: r.sections.map(s =>
+                  s.id === sectionId
+                    ? { ...s, collectionIds: s.collectionIds.filter(id => id !== collectionId) }
+                    : s
+                ),
+                updatedAt: new Date().toISOString(),
+              }
+            : r
+        )
+      })),
+
       // Calendar actions
       setScheduledPosts: (posts) => set({ scheduledPosts: posts }),
       schedulePost: (post, date) => set((state) => ({
@@ -366,14 +608,49 @@ export const useAppStore = create(
       },
     }),
     {
-      name: 'postpilot-storage',
+      name: 'postpanda-storage',
       storage: {
         getItem: (name) => {
           try {
-            const str = localStorage.getItem(name);
-            return str ? JSON.parse(str) : null;
+            // First try the current storage name
+            let str = localStorage.getItem(name);
+            let source = name;
+
+            // If not found or empty, try migrating from old storage names
+            const oldNames = ['postpilot-storage', 'postpanda-store', 'postpilot-store'];
+
+            if (!str) {
+              for (const oldName of oldNames) {
+                const oldStr = localStorage.getItem(oldName);
+                if (oldStr) {
+                  console.log(`[Postpanda] Found data in ${oldName}, migrating to ${name}`);
+                  str = oldStr;
+                  source = oldName;
+                  // Save to new name
+                  localStorage.setItem(name, oldStr);
+                  break;
+                }
+              }
+            }
+
+            // Log what we found
+            if (str) {
+              const parsed = JSON.parse(str);
+              const videoCount = parsed?.state?.youtubeVideos?.length || 0;
+              const collectionCount = parsed?.state?.youtubeCollections?.length || 0;
+              const videosByCollectionKeys = Object.keys(parsed?.state?.youtubeVideosByCollection || {});
+              console.log(`[Postpanda] Loaded from ${source}:`, {
+                youtubeVideos: videoCount,
+                youtubeCollections: collectionCount,
+                videosByCollectionKeys,
+              });
+              return parsed;
+            } else {
+              console.log('[Postpanda] No saved data found in localStorage');
+              return null;
+            }
           } catch (e) {
-            console.error('Failed to load from localStorage:', e);
+            console.error('[Postpanda] Failed to load from localStorage:', e);
             return null;
           }
         },
@@ -417,6 +694,8 @@ export const useAppStore = create(
         theme: state.theme,
         posts: state.posts,
         // gridPosts removed - should always come from MongoDB to avoid stale data
+        // Grid metadata (colors/rollout assignments) - stored locally
+        gridMeta: state.gridMeta,
         sidebarCollapsed: state.sidebarCollapsed,
         // User profile data for persistence
         user: state.user,
@@ -432,24 +711,60 @@ export const useAppStore = create(
         youtubeCollections: state.youtubeCollections,
         currentYoutubeCollectionId: state.currentYoutubeCollectionId,
         youtubeVideosByCollection: state.youtubeVideosByCollection,
+        // Rollouts
+        rollouts: state.rollouts,
+        currentRolloutId: state.currentRolloutId,
       }),
       // Custom merge to ensure persisted data takes precedence
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...persistedState,
-        // Ensure user data is preserved if it exists in persisted state
-        user: persistedState?.user || currentState.user,
-        isAuthenticated: persistedState?.isAuthenticated || currentState.isAuthenticated,
-        // Ensure YouTube data is preserved
-        youtubeVideos: persistedState?.youtubeVideos || currentState.youtubeVideos,
-        youtubeViewMode: persistedState?.youtubeViewMode || currentState.youtubeViewMode,
-        youtubeCompetitors: persistedState?.youtubeCompetitors || currentState.youtubeCompetitors,
-        youtubeChannelSettings: persistedState?.youtubeChannelSettings || currentState.youtubeChannelSettings,
-        // Ensure YouTube Collections are preserved
-        youtubeCollections: persistedState?.youtubeCollections || currentState.youtubeCollections,
-        currentYoutubeCollectionId: persistedState?.currentYoutubeCollectionId || currentState.currentYoutubeCollectionId,
-        youtubeVideosByCollection: persistedState?.youtubeVideosByCollection || currentState.youtubeVideosByCollection,
-      }),
+      merge: (persistedState, currentState) => {
+        // Get the current collection ID
+        const currentCollectionId = persistedState?.currentYoutubeCollectionId || currentState.currentYoutubeCollectionId || 'default';
+
+        // Get persisted videos
+        const persistedVideos = persistedState?.youtubeVideos || [];
+        const persistedVideosByCollection = persistedState?.youtubeVideosByCollection || {};
+
+        // Migration: If youtubeVideos has content but the current collection in youtubeVideosByCollection is empty,
+        // sync the videos to the collection. This handles data from before collections were added.
+        let finalVideosByCollection = { ...persistedVideosByCollection };
+        let finalYoutubeVideos = persistedVideos;
+
+        // Check if we need to migrate - if youtubeVideos has content but the collection storage doesn't
+        if (persistedVideos.length > 0) {
+          const collectionVideos = persistedVideosByCollection[currentCollectionId];
+          if (!collectionVideos || collectionVideos.length === 0) {
+            // Migrate videos to the current collection
+            finalVideosByCollection[currentCollectionId] = persistedVideos;
+          }
+        }
+
+        // Always load videos from the current collection
+        if (finalVideosByCollection[currentCollectionId] && finalVideosByCollection[currentCollectionId].length > 0) {
+          finalYoutubeVideos = finalVideosByCollection[currentCollectionId];
+        }
+
+        return {
+          ...currentState,
+          ...persistedState,
+          // Ensure user data is preserved if it exists in persisted state
+          user: persistedState?.user || currentState.user,
+          isAuthenticated: persistedState?.isAuthenticated || currentState.isAuthenticated,
+          // Ensure grid metadata is preserved
+          gridMeta: persistedState?.gridMeta || currentState.gridMeta,
+          // Ensure YouTube data is preserved with migration
+          youtubeVideos: finalYoutubeVideos,
+          youtubeViewMode: persistedState?.youtubeViewMode || currentState.youtubeViewMode,
+          youtubeCompetitors: persistedState?.youtubeCompetitors || currentState.youtubeCompetitors,
+          youtubeChannelSettings: persistedState?.youtubeChannelSettings || currentState.youtubeChannelSettings,
+          // Ensure YouTube Collections are preserved
+          youtubeCollections: persistedState?.youtubeCollections || currentState.youtubeCollections,
+          currentYoutubeCollectionId: currentCollectionId,
+          youtubeVideosByCollection: finalVideosByCollection,
+          // Ensure Rollouts are preserved
+          rollouts: persistedState?.rollouts || currentState.rollouts,
+          currentRolloutId: persistedState?.currentRolloutId || currentState.currentRolloutId,
+        };
+      },
     }
   )
 );

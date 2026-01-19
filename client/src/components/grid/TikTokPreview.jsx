@@ -55,7 +55,7 @@ function DraggableTikTokItem({ video, videoId, onEdit, onPlay, onReorder }) {
   const handleDragStart = (e) => {
     e.stopPropagation();
     setIsDragging(true);
-    e.dataTransfer.setData('application/postpilot-tiktok', videoId);
+    e.dataTransfer.setData('application/postpanda-tiktok', videoId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -67,7 +67,7 @@ function DraggableTikTokItem({ video, videoId, onEdit, onPlay, onReorder }) {
 
   const handleDragEnter = (e) => {
     e.preventDefault();
-    if (e.dataTransfer.types.includes('application/postpilot-tiktok')) {
+    if (e.dataTransfer.types.includes('application/postpanda-tiktok')) {
       e.stopPropagation();
       dragCounterRef.current++;
       setIsOver(true);
@@ -76,7 +76,7 @@ function DraggableTikTokItem({ video, videoId, onEdit, onPlay, onReorder }) {
 
   const handleDragOver = (e) => {
     e.preventDefault();
-    if (e.dataTransfer.types.includes('application/postpilot-tiktok')) {
+    if (e.dataTransfer.types.includes('application/postpanda-tiktok')) {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
     }
@@ -84,7 +84,7 @@ function DraggableTikTokItem({ video, videoId, onEdit, onPlay, onReorder }) {
 
   const handleDragLeave = (e) => {
     e.preventDefault();
-    if (e.dataTransfer.types.includes('application/postpilot-tiktok')) {
+    if (e.dataTransfer.types.includes('application/postpanda-tiktok')) {
       e.stopPropagation();
       dragCounterRef.current--;
       if (dragCounterRef.current === 0) {
@@ -95,7 +95,7 @@ function DraggableTikTokItem({ video, videoId, onEdit, onPlay, onReorder }) {
 
   const handleDrop = (e) => {
     e.preventDefault();
-    const sourceId = e.dataTransfer.getData('application/postpilot-tiktok');
+    const sourceId = e.dataTransfer.getData('application/postpanda-tiktok');
     if (sourceId && sourceId !== videoId) {
       e.stopPropagation();
       dragCounterRef.current = 0;

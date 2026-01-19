@@ -1,30 +1,50 @@
-import { useState, useRef } from 'react';
-import { Plus, ChevronDown, Trash2, Edit3, Check, X } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, ChevronDown, Trash2, Edit3, Check, X, GripVertical, Folder, Search, Tag, Palette, Youtube, Instagram, LayoutGrid } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
-import {
-  RolloutSection,
-  CollectionPicker,
-} from '../components/rollout';
-import '../components/rollout/rollout.css';
+import { gridApi } from '../lib/api';
+
+// TikTok icon component
+function TikTokIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z"/>
+    </svg>
+  );
+}
+
+// Preset colors for sections
+const SECTION_COLORS = [
+  { id: 'purple', value: '#8b5cf6', name: 'Purple' },
+  { id: 'blue', value: '#3b82f6', name: 'Blue' },
+  { id: 'green', value: '#10b981', name: 'Green' },
+  { id: 'orange', value: '#f97316', name: 'Orange' },
+  { id: 'pink', value: '#ec4899', name: 'Pink' },
+  { id: 'indigo', value: '#6366f1', name: 'Indigo' },
+  { id: 'teal', value: '#14b8a6', name: 'Teal' },
+  { id: 'amber', value: '#f59e0b', name: 'Amber' },
+  { id: 'red', value: '#ef4444', name: 'Red' },
+  { id: 'cyan', value: '#06b6d4', name: 'Cyan' },
+];
 
 function RolloutPlanner() {
-  const {
-    rollouts,
-    currentRollout,
-    currentRolloutId,
-    youtubeCollections,
-    rolloutsLoading,
-    addRollout,
-    updateRollout,
-    deleteRollout,
-    setCurrentRollout,
-    addRolloutSection,
-    updateRolloutSection,
-    deleteRolloutSection,
-    reorderRolloutSections,
-    addCollectionToSection,
-    removeCollectionFromSection,
-  } = useAppStore();
+  const rollouts = useAppStore((state) => state.rollouts);
+  const currentRolloutId = useAppStore((state) => state.currentRolloutId);
+  const youtubeCollections = useAppStore((state) => state.youtubeCollections);
+  const addRollout = useAppStore((state) => state.addRollout);
+  const updateRollout = useAppStore((state) => state.updateRollout);
+  const deleteRollout = useAppStore((state) => state.deleteRollout);
+  const setCurrentRollout = useAppStore((state) => state.setCurrentRollout);
+  const addRolloutSection = useAppStore((state) => state.addRolloutSection);
+  const updateRolloutSection = useAppStore((state) => state.updateRolloutSection);
+  const deleteRolloutSection = useAppStore((state) => state.deleteRolloutSection);
+  const reorderRolloutSections = useAppStore((state) => state.reorderRolloutSections);
+  const addCollectionToSection = useAppStore((state) => state.addCollectionToSection);
+  const removeCollectionFromSection = useAppStore((state) => state.removeCollectionFromSection);
+
+  const currentRollout = rollouts.find((r) => r.id === currentRolloutId) || null;
+
+  // Grid metadata for colors
+  const gridMeta = useAppStore((state) => state.gridMeta);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -33,33 +53,73 @@ function RolloutPlanner() {
   const [editedName, setEditedName] = useState('');
   const [pickerSectionId, setPickerSectionId] = useState(null);
   const [draggedSectionIndex, setDraggedSectionIndex] = useState(null);
-  const dropdownRef = useRef(null);
 
-  const handleCreateRollout = async () => {
-    if (!newRolloutName.trim()) return;
+  // Backend grids (IG/TikTok)
+  const [grids, setGrids] = useState([]);
+  const [loadingGrids, setLoadingGrids] = useState(false);
+
+  // Fetch grids from backend
+  const fetchGrids = useCallback(async () => {
     try {
-      await addRollout({ name: newRolloutName.trim() });
-      setNewRolloutName('');
-      setIsCreating(false);
-      setDropdownOpen(false);
-    } catch (error) {
-      console.error('Failed to create rollout:', error);
+      setLoadingGrids(true);
+      const data = await gridApi.getAll();
+      setGrids(data.grids || []);
+    } catch (err) {
+      console.error('Failed to fetch grids:', err);
+    } finally {
+      setLoadingGrids(false);
     }
-  };
+  }, []);
 
-  const handleSelectRollout = (rollout) => {
-    setCurrentRollout(rollout._id);
+  useEffect(() => {
+    fetchGrids();
+  }, [fetchGrids]);
+
+  // Combine all collections from all platforms
+  const allCollections = [
+    // YouTube collections
+    ...youtubeCollections.map(c => ({
+      ...c,
+      platform: 'youtube',
+      itemCount: 0, // Could be video count
+    })),
+    // Instagram grids
+    ...grids.filter(g => g.platform === 'instagram' || !g.platform).map(g => ({
+      id: g._id,
+      name: g.name,
+      platform: 'instagram',
+      color: gridMeta[g._id]?.color || null,
+      tags: [],
+      itemCount: g.cells?.filter(c => !c.isEmpty).length || 0,
+    })),
+    // TikTok grids
+    ...grids.filter(g => g.platform === 'tiktok').map(g => ({
+      id: g._id,
+      name: g.name,
+      platform: 'tiktok',
+      color: gridMeta[g._id]?.color || null,
+      tags: [],
+      itemCount: g.cells?.filter(c => !c.isEmpty).length || 0,
+    })),
+  ];
+
+  const handleCreateRollout = () => {
+    if (!newRolloutName.trim()) return;
+    addRollout({ name: newRolloutName.trim() });
+    setNewRolloutName('');
+    setIsCreating(false);
     setDropdownOpen(false);
   };
 
-  const handleDeleteRollout = async () => {
+  const handleSelectRollout = (rollout) => {
+    setCurrentRollout(rollout.id);
+    setDropdownOpen(false);
+  };
+
+  const handleDeleteRollout = () => {
     if (!currentRolloutId) return;
     if (window.confirm('Delete this rollout?')) {
-      try {
-        await deleteRollout(currentRolloutId);
-      } catch (error) {
-        console.error('Failed to delete rollout:', error);
-      }
+      deleteRollout(currentRolloutId);
     }
   };
 
@@ -69,147 +129,90 @@ function RolloutPlanner() {
     setEditingName(true);
   };
 
-  const handleSaveName = async () => {
+  const handleSaveName = () => {
     if (!currentRolloutId || !editedName.trim()) return;
-    try {
-      await updateRollout(currentRolloutId, { name: editedName.trim() });
-      setEditingName(false);
-    } catch (error) {
-      console.error('Failed to update rollout:', error);
-    }
-  };
-
-  const handleCancelEditName = () => {
+    updateRollout(currentRolloutId, { name: editedName.trim() });
     setEditingName(false);
-    setEditedName('');
   };
 
-  const handleAddSection = async () => {
+  const handleAddSection = () => {
     if (!currentRolloutId) return;
-    try {
-      await addRolloutSection(currentRolloutId, { name: `Phase ${(currentRollout?.sections?.length || 0) + 1}` });
-    } catch (error) {
-      console.error('Failed to add section:', error);
-    }
-  };
-
-  const handleUpdateSection = async (sectionId, updates) => {
-    if (!currentRolloutId) return;
-    try {
-      await updateRolloutSection(currentRolloutId, sectionId, updates);
-    } catch (error) {
-      console.error('Failed to update section:', error);
-    }
-  };
-
-  const handleDeleteSection = async (sectionId) => {
-    if (!currentRolloutId) return;
-    try {
-      await deleteRolloutSection(currentRolloutId, sectionId);
-    } catch (error) {
-      console.error('Failed to delete section:', error);
-    }
+    addRolloutSection(currentRolloutId, {
+      name: `Phase ${(currentRollout?.sections?.length || 0) + 1}`,
+    });
   };
 
   const handleDragStart = (index) => {
     setDraggedSectionIndex(index);
   };
 
-  const handleDragOver = async (e, index) => {
+  const handleDragOver = (e, index) => {
     e.preventDefault();
     if (draggedSectionIndex === null || draggedSectionIndex === index) return;
-    try {
-      await reorderRolloutSections(currentRolloutId, draggedSectionIndex, index);
-      setDraggedSectionIndex(index);
-    } catch (error) {
-      console.error('Failed to reorder sections:', error);
-    }
+    reorderRolloutSections(currentRolloutId, draggedSectionIndex, index);
+    setDraggedSectionIndex(index);
   };
 
   const handleDragEnd = () => {
     setDraggedSectionIndex(null);
   };
 
-  const handleOpenPicker = (sectionId) => {
-    setPickerSectionId(sectionId);
-  };
-
-  const handleClosePicker = () => {
-    setPickerSectionId(null);
-  };
-
-  const handleAddCollection = async (collectionId) => {
-    if (!currentRolloutId || !pickerSectionId) return;
-    try {
-      await addCollectionToSection(currentRolloutId, pickerSectionId, collectionId);
-    } catch (error) {
-      console.error('Failed to add collection to section:', error);
-    }
-  };
-
-  const handleRemoveCollection = async (sectionId, collectionId) => {
-    if (!currentRolloutId) return;
-    try {
-      await removeCollectionFromSection(currentRolloutId, sectionId, collectionId);
-    } catch (error) {
-      console.error('Failed to remove collection from section:', error);
-    }
-  };
-
-  const getCollectionById = (id) => {
-    // Support both _id (MongoDB) and id (legacy local storage)
-    return youtubeCollections.find(c => c._id === id || c.id === id);
-  };
+  const getCollectionById = (id) => allCollections.find((c) => c.id === id);
 
   const currentSectionCollectionIds = pickerSectionId
-    ? currentRollout?.sections?.find(s => s.id === pickerSectionId)?.collectionIds || []
+    ? currentRollout?.sections?.find((s) => s.id === pickerSectionId)?.collectionIds || []
     : [];
 
-  if (rolloutsLoading) {
-    return (
-      <div className="rollout-page">
-        <div className="rollout-empty">
-          <div className="rollout-empty-content">
-            <p>Loading rollouts...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="rollout-page">
-      <div className="rollout-header">
-        <div className="rollout-header-left">
-          <h1>Rollout Planner</h1>
-          <p className="rollout-subtitle">Organize your campaign phases</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-display font-semibold text-white">Rollout Planner</h1>
+          <p className="text-dark-400 text-sm mt-1">Organize your campaign phases</p>
         </div>
       </div>
 
-      <div className="rollout-toolbar">
-        <div className="rollout-selector" ref={dropdownRef}>
+      {/* Toolbar */}
+      <div className="flex items-center gap-4">
+        {/* Dropdown Selector */}
+        <div className="relative">
           <button
             type="button"
-            className="rollout-dropdown-trigger"
             onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-3 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-white hover:border-dark-600 transition-colors min-w-[200px]"
           >
-            <span>{currentRollout?.name || 'Select Rollout'}</span>
-            <ChevronDown size={18} />
+            <span className="flex-1 text-left truncate">
+              {currentRollout?.name || 'Select Rollout'}
+            </span>
+            <ChevronDown className="w-4 h-4 text-dark-400" />
           </button>
 
           {dropdownOpen && (
-            <div className="rollout-dropdown">
+            <div className="absolute top-full left-0 mt-2 w-72 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 overflow-hidden">
               {rollouts.length > 0 && (
-                <div className="rollout-dropdown-list">
+                <div className="max-h-60 overflow-y-auto">
                   {rollouts.map((rollout) => (
                     <button
-                      key={rollout._id}
+                      key={rollout.id}
                       type="button"
-                      className={`rollout-dropdown-item ${rollout._id === currentRolloutId ? 'active' : ''}`}
                       onClick={() => handleSelectRollout(rollout)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                        rollout.id === currentRolloutId
+                          ? 'bg-accent-purple/20 text-accent-purple'
+                          : 'text-dark-200 hover:bg-dark-700'
+                      }`}
                     >
-                      <span className="rollout-dropdown-item-name">{rollout.name}</span>
-                      <span className={`rollout-status-badge ${rollout.status}`}>
+                      <span className="flex-1 truncate">{rollout.name}</span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${
+                          rollout.status === 'active'
+                            ? 'bg-green-500/20 text-green-400'
+                            : rollout.status === 'completed'
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'bg-dark-600 text-dark-300'
+                        }`}
+                      >
                         {rollout.status}
                       </span>
                     </button>
@@ -217,9 +220,9 @@ function RolloutPlanner() {
                 </div>
               )}
 
-              <div className="rollout-dropdown-footer">
+              <div className="p-3 border-t border-dark-700">
                 {isCreating ? (
-                  <div className="rollout-create-form">
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       value={newRolloutName}
@@ -230,21 +233,30 @@ function RolloutPlanner() {
                         if (e.key === 'Enter') handleCreateRollout();
                         if (e.key === 'Escape') setIsCreating(false);
                       }}
+                      className="flex-1 px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-accent-purple"
                     />
-                    <button type="button" onClick={handleCreateRollout} className="rollout-create-confirm">
-                      <Check size={16} />
+                    <button
+                      type="button"
+                      onClick={handleCreateRollout}
+                      className="p-2 bg-green-600 rounded-lg text-white hover:bg-green-500"
+                    >
+                      <Check className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => setIsCreating(false)} className="rollout-create-cancel">
-                      <X size={16} />
+                    <button
+                      type="button"
+                      onClick={() => setIsCreating(false)}
+                      className="p-2 bg-dark-600 rounded-lg text-dark-300 hover:bg-dark-500"
+                    >
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
                   <button
                     type="button"
-                    className="rollout-create-btn"
                     onClick={() => setIsCreating(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 border border-dashed border-dark-600 rounded-lg text-dark-400 hover:border-accent-purple hover:text-accent-purple transition-colors"
                   >
-                    <Plus size={16} />
+                    <Plus className="w-4 h-4" />
                     <span>New Rollout</span>
                   </button>
                 )}
@@ -253,44 +265,54 @@ function RolloutPlanner() {
           )}
         </div>
 
+        {/* Rollout Actions */}
         {currentRollout && (
-          <div className="rollout-actions">
+          <div className="flex items-center gap-2">
             {editingName ? (
-              <div className="rollout-edit-name">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={editedName}
                   onChange={(e) => setEditedName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSaveName();
-                    if (e.key === 'Escape') handleCancelEditName();
+                    if (e.key === 'Escape') setEditingName(false);
                   }}
                   autoFocus
+                  className="px-3 py-1.5 bg-dark-700 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-accent-purple"
                 />
-                <button type="button" onClick={handleSaveName}>
-                  <Check size={16} />
+                <button
+                  type="button"
+                  onClick={handleSaveName}
+                  className="p-1.5 text-green-400 hover:bg-dark-700 rounded"
+                >
+                  <Check className="w-4 h-4" />
                 </button>
-                <button type="button" onClick={handleCancelEditName}>
-                  <X size={16} />
+                <button
+                  type="button"
+                  onClick={() => setEditingName(false)}
+                  className="p-1.5 text-dark-400 hover:bg-dark-700 rounded"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             ) : (
               <>
                 <button
                   type="button"
-                  className="rollout-action-btn"
                   onClick={handleStartEditName}
+                  className="p-2 text-dark-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
                   title="Rename"
                 >
-                  <Edit3 size={18} />
+                  <Edit3 className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
-                  className="rollout-action-btn danger"
                   onClick={handleDeleteRollout}
+                  className="p-2 text-dark-400 hover:text-red-400 hover:bg-dark-700 rounded-lg transition-colors"
                   title="Delete"
                 >
-                  <Trash2 size={18} />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </>
             )}
@@ -298,66 +320,603 @@ function RolloutPlanner() {
         )}
       </div>
 
+      {/* Content */}
       {!currentRollout ? (
-        <div className="rollout-empty">
-          <div className="rollout-empty-content">
-            <h2>No Rollout Selected</h2>
-            <p>Select an existing rollout or create a new one to get started.</p>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="text-center max-w-md">
+            <h2 className="text-xl font-display text-white mb-2">No Rollout Selected</h2>
+            <p className="text-dark-400 mb-6">
+              Select an existing rollout or create a new one to get started.
+            </p>
             <button
               type="button"
-              className="primary"
               onClick={() => {
                 setDropdownOpen(true);
                 setIsCreating(true);
               }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-purple/90 transition-colors"
             >
-              <Plus size={18} />
+              <Plus className="w-4 h-4" />
               Create Rollout
             </button>
           </div>
         </div>
       ) : (
-        <div className="rollout-content">
-          <div className="rollout-sections">
-            {currentRollout.sections
-              .sort((a, b) => a.order - b.order)
-              .map((section, index) => (
-                <RolloutSection
-                  key={section.id}
-                  section={section}
-                  index={index}
-                  collections={section.collectionIds.map(getCollectionById).filter(Boolean)}
-                  onUpdate={(updates) => handleUpdateSection(section.id, updates)}
-                  onDelete={() => handleDeleteSection(section.id)}
-                  onAddCollection={() => handleOpenPicker(section.id)}
-                  onRemoveCollection={(collectionId) => handleRemoveCollection(section.id, collectionId)}
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragEnd={handleDragEnd}
-                  isDragging={draggedSectionIndex === index}
-                />
-              ))}
+        <div className="space-y-4">
+          {/* Sections */}
+          {currentRollout.sections
+            .sort((a, b) => a.order - b.order)
+            .map((section, index) => (
+              <RolloutSection
+                key={section.id}
+                section={section}
+                index={index}
+                rolloutId={currentRolloutId}
+                collections={section.collectionIds.map(getCollectionById).filter(Boolean)}
+                onOpenPicker={() => setPickerSectionId(section.id)}
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                isDragging={draggedSectionIndex === index}
+              />
+            ))}
 
-            <button
-              type="button"
-              className="rollout-add-section"
-              onClick={handleAddSection}
-            >
-              <Plus size={20} />
-              <span>Add Section</span>
-            </button>
-          </div>
+          {/* Add Section Button */}
+          <button
+            type="button"
+            onClick={handleAddSection}
+            className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-dark-700 rounded-xl text-dark-400 hover:border-accent-purple hover:text-accent-purple transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add Section</span>
+          </button>
         </div>
       )}
 
+      {/* Collection Picker Modal */}
       {pickerSectionId && (
         <CollectionPicker
-          collections={youtubeCollections}
+          collections={allCollections}
           selectedIds={currentSectionCollectionIds}
-          onSelect={handleAddCollection}
-          onClose={handleClosePicker}
+          onSelect={(collectionId) => {
+            addCollectionToSection(currentRolloutId, pickerSectionId, collectionId);
+          }}
+          onClose={() => setPickerSectionId(null)}
         />
       )}
+    </div>
+  );
+}
+
+function RolloutSection({
+  section,
+  index,
+  rolloutId,
+  collections,
+  onOpenPicker,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  isDragging,
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState(section.name);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const updateRolloutSection = useAppStore((state) => state.updateRolloutSection);
+  const deleteRolloutSection = useAppStore((state) => state.deleteRolloutSection);
+  const removeCollectionFromSection = useAppStore((state) => state.removeCollectionFromSection);
+
+  const handleSaveName = () => {
+    if (!editedName.trim()) return;
+    updateRolloutSection(rolloutId, section.id, { name: editedName.trim() });
+    setIsEditing(false);
+  };
+
+  const handleColorSelect = (color) => {
+    updateRolloutSection(rolloutId, section.id, { color });
+    setShowColorPicker(false);
+  };
+
+  const sectionColor = section.color || '#8b5cf6';
+
+  return (
+    <div
+      className={`bg-dark-800 border border-dark-700 rounded-xl overflow-hidden transition-all ${
+        isDragging ? 'opacity-50 border-accent-purple' : ''
+      }`}
+      style={{ borderLeftWidth: '4px', borderLeftColor: sectionColor }}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+    >
+      {/* Section Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-dark-750 border-b border-dark-700">
+        <div className="cursor-grab text-dark-500 hover:text-dark-300">
+          <GripVertical className="w-5 h-5" />
+        </div>
+
+        {/* Color indicator */}
+        <div
+          className="w-4 h-4 rounded-full flex-shrink-0 border border-dark-500 cursor-pointer hover:scale-110 transition-transform"
+          style={{ backgroundColor: sectionColor }}
+          onClick={() => setShowColorPicker(!showColorPicker)}
+          title="Change phase color"
+        />
+
+        <span
+          className="text-xs font-medium px-2 py-1 rounded"
+          style={{ backgroundColor: `${sectionColor}20`, color: sectionColor }}
+        >
+          Phase {index + 1}
+        </span>
+
+        {isEditing ? (
+          <div className="flex-1 flex items-center gap-2">
+            <input
+              type="text"
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveName();
+                if (e.key === 'Escape') setIsEditing(false);
+              }}
+              autoFocus
+              className="flex-1 px-2 py-1 bg-dark-700 border border-dark-600 rounded text-white text-sm focus:outline-none focus:border-accent-purple"
+            />
+            <button type="button" onClick={handleSaveName} className="p-1 text-green-400">
+              <Check className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={() => setIsEditing(false)} className="p-1 text-dark-400">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <h3 className="flex-1 font-medium text-white">{section.name}</h3>
+        )}
+
+        <div className="flex items-center gap-1">
+          {/* Color picker button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded transition-colors"
+              title="Change color"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+            {showColorPicker && (
+              <div className="absolute top-full right-0 mt-1 w-36 bg-dark-900 border border-dark-600 rounded-lg shadow-xl z-50 p-2">
+                <p className="text-xs text-dark-400 mb-2 px-1">Phase Color</p>
+                <div className="grid grid-cols-5 gap-1">
+                  {SECTION_COLORS.map((color) => (
+                    <button
+                      key={color.id}
+                      type="button"
+                      onClick={() => handleColorSelect(color.value)}
+                      className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                        sectionColor === color.value ? 'border-white' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: color.value }}
+                      title={color.name}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditedName(section.name);
+                setIsEditing(true);
+              }}
+              className="p-1.5 text-dark-400 hover:text-white hover:bg-dark-700 rounded transition-colors"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => deleteRolloutSection(rolloutId, section.id)}
+            className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-dark-700 rounded transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Section Content */}
+      <div className="p-4">
+        {collections.length === 0 ? (
+          <p className="text-center text-dark-500 py-4">No collections in this section</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+            {collections.map((collection) => (
+              <CollectionCard
+                key={collection.id}
+                collection={collection}
+                onRemove={() => removeCollectionFromSection(rolloutId, section.id, collection.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onOpenPicker}
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-dark-600 rounded-lg text-dark-400 hover:border-accent-purple hover:text-accent-purple transition-colors text-sm"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Collection</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CollectionCard({ collection, onRemove }) {
+  const collectionColor = collection.color || '#6b7280';
+
+  // Get platform icon
+  const getPlatformIcon = (platform) => {
+    switch (platform) {
+      case 'youtube':
+        return <Youtube className="w-4 h-4" />;
+      case 'instagram':
+        return <Instagram className="w-4 h-4" />;
+      case 'tiktok':
+        return <TikTokIcon className="w-4 h-4" />;
+      default:
+        return <Folder className="w-4 h-4" />;
+    }
+  };
+
+  // Get platform color
+  const getPlatformColor = (platform) => {
+    switch (platform) {
+      case 'youtube':
+        return '#ef4444';
+      case 'instagram':
+        return '#e1306c';
+      case 'tiktok':
+        return '#00f2ea';
+      default:
+        return '#8b5cf6';
+    }
+  };
+
+  const platformColor = getPlatformColor(collection.platform);
+
+  return (
+    <div
+      className="group relative flex items-center gap-3 p-3 bg-dark-750 border border-dark-600 rounded-lg hover:border-dark-500 transition-colors"
+      style={{ borderLeftWidth: '3px', borderLeftColor: collectionColor }}
+    >
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center"
+        style={{ backgroundColor: `${platformColor}20`, color: platformColor }}
+      >
+        {getPlatformIcon(collection.platform)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-white truncate">{collection.name}</span>
+          {collection.platform && (
+            <span
+              className="text-[10px] px-1 py-0.5 rounded capitalize flex-shrink-0"
+              style={{ backgroundColor: `${platformColor}20`, color: platformColor }}
+            >
+              {collection.platform === 'youtube' ? 'YT' : collection.platform === 'instagram' ? 'IG' : 'TT'}
+            </span>
+          )}
+        </div>
+        {collection.tags && collection.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {collection.tags.slice(0, 2).map((tag) => (
+              <span key={tag} className="text-xs px-1.5 py-0.5 bg-dark-600 rounded text-dark-300">
+                {tag}
+              </span>
+            ))}
+            {collection.tags.length > 2 && (
+              <span className="text-xs text-dark-400">+{collection.tags.length - 2}</span>
+            )}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-1 right-1 p-1 text-dark-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [selectedPlatform, setSelectedPlatform] = useState(null); // null = all, 'youtube', 'instagram', 'tiktok'
+  const addYoutubeCollection = useAppStore((state) => state.addYoutubeCollection);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newTags, setNewTags] = useState('');
+
+  const allTags = [...new Set(collections.flatMap((c) => c.tags || []))].sort();
+
+  // Platform counts
+  const platformCounts = {
+    youtube: collections.filter(c => c.platform === 'youtube').length,
+    instagram: collections.filter(c => c.platform === 'instagram').length,
+    tiktok: collections.filter(c => c.platform === 'tiktok').length,
+  };
+
+  const filteredCollections = collections.filter((c) => {
+    const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTags = selectedTags.length === 0 || selectedTags.every((t) => (c.tags || []).includes(t));
+    const matchesPlatform = !selectedPlatform || c.platform === selectedPlatform;
+    const notSelected = !selectedIds.includes(c.id);
+    return matchesSearch && matchesTags && matchesPlatform && notSelected;
+  });
+
+  // Helper to get platform icon
+  const getPlatformIcon = (platform) => {
+    switch (platform) {
+      case 'youtube':
+        return <Youtube className="w-4 h-4" />;
+      case 'instagram':
+        return <Instagram className="w-4 h-4" />;
+      case 'tiktok':
+        return <TikTokIcon className="w-4 h-4" />;
+      default:
+        return <Folder className="w-4 h-4" />;
+    }
+  };
+
+  // Helper to get platform color
+  const getPlatformColor = (platform) => {
+    switch (platform) {
+      case 'youtube':
+        return '#ef4444'; // red
+      case 'instagram':
+        return '#e1306c'; // pink/magenta
+      case 'tiktok':
+        return '#00f2ea'; // tiktok cyan
+      default:
+        return '#8b5cf6'; // purple
+    }
+  };
+
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    const tags = newTags.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+    // Note: addYoutubeCollection in Postpanda takes just a name string
+    // We need to check if it supports tags
+    addYoutubeCollection(newName.trim());
+    setNewName('');
+    setNewTags('');
+    setIsCreating(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-dark-800 border border-dark-700 rounded-xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-700">
+          <h3 className="font-medium text-white">Add Collection</h3>
+          <button type="button" onClick={onClose} className="p-1 text-dark-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-dark-700">
+          <Search className="w-4 h-4 text-dark-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search collections..."
+            className="flex-1 bg-transparent text-white placeholder-dark-500 focus:outline-none"
+          />
+        </div>
+
+        {/* Platform Filter Tabs */}
+        <div className="flex items-center gap-1 px-4 py-3 border-b border-dark-700">
+          <button
+            type="button"
+            onClick={() => setSelectedPlatform(null)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              selectedPlatform === null
+                ? 'bg-accent-purple text-white'
+                : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span>All ({collections.filter(c => !selectedIds.includes(c.id)).length})</span>
+          </button>
+          {platformCounts.youtube > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPlatform('youtube')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                selectedPlatform === 'youtube'
+                  ? 'bg-red-500 text-white'
+                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+              }`}
+            >
+              <Youtube className="w-4 h-4" />
+              <span>{platformCounts.youtube}</span>
+            </button>
+          )}
+          {platformCounts.instagram > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPlatform('instagram')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                selectedPlatform === 'instagram'
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+              }`}
+            >
+              <Instagram className="w-4 h-4" />
+              <span>{platformCounts.instagram}</span>
+            </button>
+          )}
+          {platformCounts.tiktok > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPlatform('tiktok')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                selectedPlatform === 'tiktok'
+                  ? 'bg-cyan-500 text-white'
+                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+              }`}
+            >
+              <TikTokIcon className="w-4 h-4" />
+              <span>{platformCounts.tiktok}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tags Filter */}
+        {allTags.length > 0 && (
+          <div className="px-4 py-3 border-b border-dark-700">
+            <div className="flex items-center gap-2 text-xs text-dark-500 mb-2">
+              <Tag className="w-3.5 h-3.5" />
+              <span>Filter by tags:</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() =>
+                    setSelectedTags((prev) =>
+                      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                    )
+                  }
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    selectedTags.includes(tag)
+                      ? 'bg-accent-purple text-white'
+                      : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* List */}
+        <div className="max-h-64 overflow-y-auto">
+          {filteredCollections.length === 0 ? (
+            <p className="text-center text-dark-500 py-8">No collections found</p>
+          ) : (
+            filteredCollections.map((collection) => {
+              const platformColor = getPlatformColor(collection.platform);
+              const collectionColor = collection.color || platformColor;
+              return (
+                <button
+                  key={collection.id}
+                  type="button"
+                  onClick={() => onSelect(collection.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-dark-700 transition-colors"
+                  style={{ borderLeftWidth: '3px', borderLeftColor: collectionColor }}
+                >
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: `${platformColor}20`, color: platformColor }}
+                  >
+                    {getPlatformIcon(collection.platform)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-white">{collection.name}</span>
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded capitalize"
+                        style={{ backgroundColor: `${platformColor}20`, color: platformColor }}
+                      >
+                        {collection.platform || 'youtube'}
+                      </span>
+                    </div>
+                    {collection.tags && collection.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {collection.tags.map((tag) => (
+                          <span key={tag} className="text-xs px-1.5 py-0.5 bg-dark-600 rounded text-dark-400">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {collection.itemCount > 0 && (
+                      <span className="text-xs text-dark-500 mt-1 block">
+                        {collection.itemCount} items
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-dark-700">
+          {isCreating ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Collection name..."
+                autoFocus
+                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-accent-purple"
+              />
+              <input
+                type="text"
+                value={newTags}
+                onChange={(e) => setNewTags(e.target.value)}
+                placeholder="Tags (comma-separated)..."
+                className="w-full px-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-accent-purple"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(false)}
+                  className="px-3 py-1.5 text-sm text-dark-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="px-3 py-1.5 text-sm bg-accent-purple text-white rounded-lg hover:bg-accent-purple/90"
+                >
+                  Create & Add
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsCreating(true)}
+              className="w-full flex items-center justify-center gap-2 py-2 border border-dashed border-dark-600 rounded-lg text-dark-400 hover:border-accent-purple hover:text-accent-purple transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create New Collection</span>
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

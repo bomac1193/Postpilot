@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical, Replace, Layers, Trash2, Eye, EyeOff, Play } from 'lucide-react';
 import { setInternalDragActive } from '../../utils/dragState';
 import { generateVideoThumbnail, formatDuration } from '../../utils/videoUtils';
-import { contentApi } from '../../lib/api';
+import { contentApi, gridApi } from '../../lib/api';
 import api from '../../lib/api';
 import ReelPlayer from './ReelPlayer';
 import ReelThumbnailSelector from './ReelThumbnailSelector';
@@ -112,8 +112,8 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
     setIsShiftDrag(shiftHeld);
 
     setIsDragging(true);
-    e.dataTransfer.setData('application/postpilot-item', postId);
-    e.dataTransfer.setData('application/postpilot-shift', shiftHeld ? 'true' : 'false');
+    e.dataTransfer.setData('application/postpanda-item', postId);
+    e.dataTransfer.setData('application/postpanda-shift', shiftHeld ? 'true' : 'false');
     e.dataTransfer.effectAllowed = 'move';
 
     // Create a custom drag image
@@ -151,7 +151,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
       setInternalDragActive(true);
       setIsFileOver(true);
       setIsOver(false);
-    } else if (e.dataTransfer.types.includes('application/postpilot-item')) {
+    } else if (e.dataTransfer.types.includes('application/postpanda-item')) {
       setIsOver(true);
       setIsFileOver(false);
     }
@@ -162,7 +162,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
     e.stopPropagation();
 
     // Check if it's an internal item drag
-    if (e.dataTransfer.types.includes('application/postpilot-item')) {
+    if (e.dataTransfer.types.includes('application/postpanda-item')) {
       e.dataTransfer.dropEffect = 'move';
     }
     // Check if it's a file drag from outside (Windows Explorer)
@@ -196,11 +196,11 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
     setIsFileOver(false);
 
     // Check for internal item drag first
-    const sourceId = e.dataTransfer.getData('application/postpilot-item');
+    const sourceId = e.dataTransfer.getData('application/postpanda-item');
 
     if (sourceId && sourceId !== postId) {
       // Check if shift was held during drag
-      const wasShiftDrag = e.dataTransfer.getData('application/postpilot-shift') === 'true';
+      const wasShiftDrag = e.dataTransfer.getData('application/postpanda-shift') === 'true';
 
       if (wasShiftDrag) {
         // Shift+drag = show replace/carousel modal
@@ -345,7 +345,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragStart = (e) => {
     e.stopPropagation();
     setIsDragging(true);
-    e.dataTransfer.setData('application/postpilot-reel', reelId);
+    e.dataTransfer.setData('application/postpanda-reel', reelId);
     e.dataTransfer.effectAllowed = 'move';
 
     // Create a custom drag image
@@ -368,7 +368,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragEnter = (e) => {
     e.preventDefault();
     // Only handle internal reel drags, let file drops bubble up
-    if (e.dataTransfer.types.includes('application/postpilot-reel')) {
+    if (e.dataTransfer.types.includes('application/postpanda-reel')) {
       e.stopPropagation();
       dragCounterRef.current++;
       setIsOver(true);
@@ -378,7 +378,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragOver = (e) => {
     e.preventDefault();
     // Only handle internal reel drags, let file drops bubble up
-    if (e.dataTransfer.types.includes('application/postpilot-reel')) {
+    if (e.dataTransfer.types.includes('application/postpanda-reel')) {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
     }
@@ -387,7 +387,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragLeave = (e) => {
     e.preventDefault();
     // Only handle internal reel drags
-    if (e.dataTransfer.types.includes('application/postpilot-reel')) {
+    if (e.dataTransfer.types.includes('application/postpanda-reel')) {
       e.stopPropagation();
       dragCounterRef.current--;
       if (dragCounterRef.current === 0) {
@@ -400,7 +400,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
     e.preventDefault();
 
     // Only handle internal reel drags, let file drops bubble up to parent
-    const sourceId = e.dataTransfer.getData('application/postpilot-reel');
+    const sourceId = e.dataTransfer.getData('application/postpanda-reel');
     if (sourceId && sourceId !== reelId) {
       e.stopPropagation();
       dragCounterRef.current = 0;
@@ -477,7 +477,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   );
 }
 
-function GridPreview({ posts, layout, showRowHandles = true, onDeletePost }) {
+function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridId }) {
   const cols = layout?.cols || 3;
   const user = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
@@ -508,7 +508,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost }) {
   };
 
   // Handle row drag end
-  const handleRowDragEnd = (event) => {
+  const handleRowDragEnd = async (event) => {
     const { active, over } = event;
     setActiveRowId(null);
 
@@ -522,6 +522,18 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost }) {
         // Flatten back to single array
         const newPosts = newRows.flat();
         setGridPosts(newPosts);
+
+        // Persist to backend
+        if (gridId) {
+          try {
+            await gridApi.reorder(gridId, newPosts.map((p, i) => ({
+              contentId: p.id || p._id,
+              position: i,
+            })));
+          } catch (err) {
+            console.error('Failed to save row reorder:', err);
+          }
+        }
       }
     }
   };
@@ -922,7 +934,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost }) {
   };
 
   // Handle reorder (default drag without shift) - just swap positions, no modal
-  const handleReorder = (sourceId, targetId) => {
+  const handleReorder = async (sourceId, targetId) => {
     if (!sourceId || !targetId || sourceId === targetId) return;
 
     const sourceIndex = posts.findIndex(p => (p.id || p._id) === sourceId);
@@ -934,6 +946,18 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost }) {
     const newPosts = [...posts];
     [newPosts[sourceIndex], newPosts[targetIndex]] = [newPosts[targetIndex], newPosts[sourceIndex]];
     setGridPosts(newPosts);
+
+    // Persist to backend
+    if (gridId) {
+      try {
+        await gridApi.reorder(gridId, newPosts.map((p, i) => ({
+          contentId: p.id || p._id,
+          position: i,
+        })));
+      } catch (err) {
+        console.error('Failed to save reorder:', err);
+      }
+    }
   };
 
   // Handle replace/carousel drag (shift+drag) - show modal

@@ -229,7 +229,7 @@ function Settings() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `postpilot-export-${Date.now()}.json`;
+    a.download = `postpanda-export-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

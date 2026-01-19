@@ -54,7 +54,24 @@ import {
   X,
   MoreVertical,
   Music2,
+  Palette,
+  Link2,
+  Unlink,
 } from 'lucide-react';
+
+// Preset colors for grids
+const GRID_COLORS = [
+  { id: 'purple', value: '#8b5cf6', name: 'Purple' },
+  { id: 'blue', value: '#3b82f6', name: 'Blue' },
+  { id: 'green', value: '#10b981', name: 'Green' },
+  { id: 'orange', value: '#f97316', name: 'Orange' },
+  { id: 'pink', value: '#ec4899', name: 'Pink' },
+  { id: 'indigo', value: '#6366f1', name: 'Indigo' },
+  { id: 'teal', value: '#14b8a6', name: 'Teal' },
+  { id: 'amber', value: '#f59e0b', name: 'Amber' },
+  { id: 'red', value: '#ef4444', name: 'Red' },
+  { id: 'cyan', value: '#06b6d4', name: 'Cyan' },
+];
 
 // TikTok icon component
 function TikTokIcon({ className }) {
@@ -79,6 +96,15 @@ function GridPlanner() {
   const selectPost = useAppStore((state) => state.selectPost);
   const removeFromGrid = useAppStore((state) => state.removeFromGrid);
 
+  // Grid metadata (colors/rollout assignments)
+  const gridMeta = useAppStore((state) => state.gridMeta);
+  const updateGridColor = useAppStore((state) => state.updateGridColor);
+  const assignGridToRollout = useAppStore((state) => state.assignGridToRollout);
+  const unassignGridFromRollout = useAppStore((state) => state.unassignGridFromRollout);
+
+  // Rollouts for assignment
+  const rollouts = useAppStore((state) => state.rollouts);
+
   // Backend state
   const [grids, setGrids] = useState([]);
   const [currentGridId, setCurrentGridId] = useState(null);
@@ -92,6 +118,8 @@ function GridPlanner() {
   const [editingGridId, setEditingGridId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [showColorPickerFor, setShowColorPickerFor] = useState(null);
+  const [showRolloutPickerFor, setShowRolloutPickerFor] = useState(null);
 
   // Check authentication on mount
   useEffect(() => {
@@ -116,7 +144,7 @@ function GridPlanner() {
 
   const [activeLayout, setActiveLayout] = useState('3x3');
   const [isLocked, setIsLocked] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const [activeId, setActiveId] = useState(null);
   const [gridZoom, setGridZoom] = useState(100); // Zoom percentage (50-150)
   const [showRowHandles, setShowRowHandles] = useState(true); // Toggle for row drag handles in preview
@@ -274,6 +302,38 @@ function GridPlanner() {
       console.error('Failed to delete grid:', err);
     }
   };
+
+  // Handle color selection for grid
+  const handleGridColorSelect = useCallback((e, gridId, color) => {
+    e.stopPropagation();
+    updateGridColor(gridId, color);
+    setShowColorPickerFor(null);
+  }, [updateGridColor]);
+
+  // Handle rollout assignment for grid
+  const handleAssignGridToRollout = useCallback((e, gridId, rolloutId, sectionId) => {
+    e.stopPropagation();
+    assignGridToRollout(gridId, rolloutId, sectionId);
+    setShowRolloutPickerFor(null);
+  }, [assignGridToRollout]);
+
+  // Handle unassign grid from rollout
+  const handleUnassignGridFromRollout = useCallback((e, gridId) => {
+    e.stopPropagation();
+    unassignGridFromRollout(gridId);
+    setShowRolloutPickerFor(null);
+  }, [unassignGridFromRollout]);
+
+  // Get rollout and section info for a grid
+  const getGridRolloutInfo = useCallback((gridId) => {
+    const meta = gridMeta[gridId];
+    if (!meta?.rolloutId || !meta?.sectionId) return null;
+    const rollout = rollouts.find(r => r.id === meta.rolloutId);
+    if (!rollout) return null;
+    const section = rollout.sections.find(s => s.id === meta.sectionId);
+    if (!section) return null;
+    return { rollout, section };
+  }, [gridMeta, rollouts]);
 
   useEffect(() => {
     fetchGrids();
@@ -773,30 +833,62 @@ function GridPlanner() {
                           </div>
                         ) : (
                           /* Normal View */
-                          <button
-                            onClick={() => handleSelectGrid(grid)}
-                            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
-                              currentGridId === grid._id
-                                ? 'text-accent-purple'
-                                : 'text-dark-200'
-                            }`}
-                          >
-                            <Grid3X3 className="w-4 h-4 flex-shrink-0" />
-                            <span className="flex-1 truncate">{grid.name}</span>
-                            <span className="text-xs text-dark-500 mr-1">
-                              {grid.cells?.filter(c => !c.isEmpty).length || 0}
-                            </span>
+                          <>
+                            <button
+                              onClick={() => handleSelectGrid(grid)}
+                              className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
+                                currentGridId === grid._id
+                                  ? 'text-accent-purple'
+                                  : 'text-dark-200'
+                              }`}
+                            >
+                              {/* Color dot */}
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0 border border-dark-500"
+                                style={{ backgroundColor: gridMeta[grid._id]?.color || '#6b7280' }}
+                              />
+                              <Grid3X3 className="w-4 h-4 flex-shrink-0" />
+                              <span className="flex-1 truncate">{grid.name}</span>
+                              <span className="text-xs text-dark-500 mr-1">
+                                {grid.cells?.filter(c => !c.isEmpty).length || 0}
+                              </span>
 
-                            {/* Action Buttons - show on hover */}
-                            <div className="hidden group-hover:flex items-center gap-1">
-                              <button
-                                onClick={(e) => handleStartRename(e, grid)}
-                                className="p-1 text-dark-400 hover:text-accent-purple hover:bg-dark-500 rounded"
-                                title="Rename"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
+                              {/* Action Buttons - show on hover */}
+                              <div className="hidden group-hover:flex items-center gap-1">
+                                {/* Color picker button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowColorPickerFor(showColorPickerFor === grid._id ? null : grid._id);
+                                    setShowRolloutPickerFor(null);
+                                  }}
+                                  className="p-1 text-dark-400 hover:text-accent-purple hover:bg-dark-500 rounded"
+                                  title="Set Color"
+                                >
+                                  <Palette className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Rollout assignment button */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowRolloutPickerFor(showRolloutPickerFor === grid._id ? null : grid._id);
+                                    setShowColorPickerFor(null);
+                                  }}
+                                  className={`p-1 hover:bg-dark-500 rounded ${
+                                    gridMeta[grid._id]?.rolloutId ? 'text-green-400' : 'text-dark-400 hover:text-accent-purple'
+                                  }`}
+                                  title={gridMeta[grid._id]?.rolloutId ? 'Change Rollout' : 'Assign to Rollout'}
+                                >
+                                  {gridMeta[grid._id]?.rolloutId ? <Link2 className="w-3.5 h-3.5" /> : <Unlink className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  onClick={(e) => handleStartRename(e, grid)}
+                                  className="p-1 text-dark-400 hover:text-accent-purple hover:bg-dark-500 rounded"
+                                  title="Rename"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
                                 onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(grid._id); }}
                                 className="p-1 text-dark-400 hover:text-red-400 hover:bg-dark-500 rounded"
                                 title="Delete"
@@ -805,6 +897,96 @@ function GridPlanner() {
                               </button>
                             </div>
                           </button>
+
+                            {/* Rollout info badge */}
+                            {getGridRolloutInfo(grid._id) && (
+                              <div className="px-3 pb-2 -mt-1">
+                                <div
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+                                  style={{
+                                    backgroundColor: `${getGridRolloutInfo(grid._id).section.color}20`,
+                                    color: getGridRolloutInfo(grid._id).section.color
+                                  }}
+                                >
+                                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getGridRolloutInfo(grid._id).section.color }} />
+                                  {getGridRolloutInfo(grid._id).rollout.name} → {getGridRolloutInfo(grid._id).section.name}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Color Picker Dropdown */}
+                            {showColorPickerFor === grid._id && (
+                              <div className="absolute left-full top-0 ml-1 w-36 bg-dark-900 border border-dark-600 rounded-lg shadow-xl z-50 p-2" onClick={(e) => e.stopPropagation()}>
+                                <p className="text-xs text-dark-400 mb-2 px-1">Select Color</p>
+                                <div className="grid grid-cols-5 gap-1">
+                                  {GRID_COLORS.map((color) => (
+                                    <button
+                                      key={color.id}
+                                      onClick={(e) => handleGridColorSelect(e, grid._id, color.value)}
+                                      className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${
+                                        gridMeta[grid._id]?.color === color.value ? 'border-white' : 'border-transparent'
+                                      }`}
+                                      style={{ backgroundColor: color.value }}
+                                      title={color.name}
+                                    />
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={(e) => handleGridColorSelect(e, grid._id, null)}
+                                  className="w-full mt-2 px-2 py-1 text-xs text-dark-400 hover:text-dark-200 hover:bg-dark-700 rounded"
+                                >
+                                  Clear Color
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Rollout Picker Dropdown */}
+                            {showRolloutPickerFor === grid._id && (
+                              <div className="absolute left-full top-0 ml-1 w-56 bg-dark-900 border border-dark-600 rounded-lg shadow-xl z-50 p-2 max-h-64 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                                <p className="text-xs text-dark-400 mb-2 px-1">Assign to Phase</p>
+                                {rollouts.length === 0 ? (
+                                  <p className="text-xs text-dark-500 px-1">No rollouts created yet</p>
+                                ) : (
+                                  rollouts.map((rollout) => (
+                                    <div key={rollout.id} className="mb-2">
+                                      <p className="text-xs font-medium text-dark-300 px-1 mb-1">{rollout.name}</p>
+                                      {rollout.sections.length === 0 ? (
+                                        <p className="text-xs text-dark-500 px-1 ml-2">No phases</p>
+                                      ) : (
+                                        rollout.sections.map((section) => (
+                                          <button
+                                            key={section.id}
+                                            onClick={(e) => handleAssignGridToRollout(e, grid._id, rollout.id, section.id)}
+                                            className={`w-full flex items-center gap-2 px-2 py-1.5 text-left rounded hover:bg-dark-700 ${
+                                              gridMeta[grid._id]?.sectionId === section.id ? 'bg-dark-700' : ''
+                                            }`}
+                                          >
+                                            <span
+                                              className="w-3 h-3 rounded-full flex-shrink-0"
+                                              style={{ backgroundColor: section.color || '#6b7280' }}
+                                            />
+                                            <span className="text-xs text-dark-200 truncate">{section.name}</span>
+                                            {gridMeta[grid._id]?.sectionId === section.id && (
+                                              <Check className="w-3 h-3 text-green-400 ml-auto" />
+                                            )}
+                                          </button>
+                                        ))
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                                {gridMeta[grid._id]?.rolloutId && (
+                                  <button
+                                    onClick={(e) => handleUnassignGridFromRollout(e, grid._id)}
+                                    className="w-full mt-2 px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 rounded flex items-center gap-2"
+                                  >
+                                    <Unlink className="w-3 h-3" />
+                                    Remove from Rollout
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     ))}
@@ -1105,7 +1287,7 @@ function GridPlanner() {
             selectedPlatform === 'tiktok' ? (
               <TikTokPreview showRowHandles={showRowHandles} />
             ) : (
-              <GridPreview posts={gridPosts} layout={currentLayout} showRowHandles={showRowHandles} onDeletePost={handleDeletePost} />
+              <GridPreview posts={gridPosts} layout={currentLayout} showRowHandles={showRowHandles} onDeletePost={handleDeletePost} gridId={currentGridId} />
             )
           ) : (
             <div className="bg-dark-800 rounded-2xl p-6 border border-dark-700">

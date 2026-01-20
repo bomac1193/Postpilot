@@ -1902,35 +1902,55 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   const handleHighlightDragStart = (e, highlightId) => {
     highlightDragOccurredRef.current = true;
     setDraggingHighlightId(highlightId);
-    e.dataTransfer.setData('application/highlight-id', highlightId);
+    e.dataTransfer.setData('text/plain', highlightId); // Use text/plain for better compatibility
     e.dataTransfer.effectAllowed = 'move';
+
+    // Set a custom drag image (optional, improves UX)
+    if (e.target) {
+      e.dataTransfer.setDragImage(e.target, 33, 33); // Center of 66px highlight
+    }
   };
 
   const handleHighlightDragOver = (e, highlightId) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
-    if (highlightId !== draggingHighlightId) {
+
+    // Only set drag over if it's a different highlight than the one being dragged
+    if (draggingHighlightId && highlightId !== draggingHighlightId) {
       setHighlightDragOverId(highlightId);
     }
   };
 
-  const handleHighlightDragLeave = () => {
-    setHighlightDragOverId(null);
+  const handleHighlightDragLeave = (e) => {
+    // Only clear if we're actually leaving the element (not entering a child)
+    const relatedTarget = e.relatedTarget;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setHighlightDragOverId(null);
+    }
   };
 
   const handleHighlightDrop = (e, targetId) => {
     e.preventDefault();
     e.stopPropagation();
-    const sourceId = e.dataTransfer.getData('application/highlight-id');
+
+    const sourceId = draggingHighlightId || e.dataTransfer.getData('text/plain');
+    console.log('[Highlight Drop] Source:', sourceId, 'Target:', targetId);
 
     if (sourceId && sourceId !== targetId) {
       const sourceIndex = highlights.findIndex(h => h.id === sourceId);
       const targetIndex = highlights.findIndex(h => h.id === targetId);
 
+      console.log('[Highlight Drop] Source Index:', sourceIndex, 'Target Index:', targetIndex);
+
       if (sourceIndex !== -1 && targetIndex !== -1) {
-        // Swap the highlights instead of shifting
+        // Swap the highlights
         const newHighlights = [...highlights];
-        [newHighlights[sourceIndex], newHighlights[targetIndex]] = [newHighlights[targetIndex], newHighlights[sourceIndex]];
+        const temp = newHighlights[sourceIndex];
+        newHighlights[sourceIndex] = newHighlights[targetIndex];
+        newHighlights[targetIndex] = temp;
+
+        console.log('[Highlight Drop] Swapped! New order:', newHighlights.map(h => h.name));
         setHighlights(newHighlights);
       }
     }
@@ -1940,8 +1960,14 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   };
 
   const handleHighlightDragEnd = () => {
+    // Reset drag state
     setDraggingHighlightId(null);
     setHighlightDragOverId(null);
+
+    // Reset the drag occurred flag after a short delay to allow click to be prevented
+    setTimeout(() => {
+      highlightDragOccurredRef.current = false;
+    }, 100);
   };
 
   return (
@@ -2073,7 +2099,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
                 draggable
                 onDragStart={(e) => handleHighlightDragStart(e, highlight.id)}
                 onDragOver={(e) => handleHighlightDragOver(e, highlight.id)}
-                onDragLeave={handleHighlightDragLeave}
+                onDragLeave={(e) => handleHighlightDragLeave(e)}
                 onDrop={(e) => handleHighlightDrop(e, highlight.id)}
                 onDragEnd={handleHighlightDragEnd}
                 onClick={() => handleHighlightClick(highlight)}

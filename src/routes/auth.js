@@ -11,6 +11,7 @@ router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.getCurrentUser);
 router.put('/profile', authenticate, authController.updateProfile);
 router.put('/avatar', authenticate, upload.single('avatar'), authController.uploadAvatar);
+router.post('/highlight-cover', authenticate, upload.single('cover'), authController.uploadHighlightCover);
 
 // Google OAuth
 router.get('/google', authController.googleAuth);

@@ -1453,8 +1453,22 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
   // Highlights state
   const [highlights, setHighlights] = useState(() => {
-    const saved = localStorage.getItem('instagram-highlights');
-    return saved ? JSON.parse(saved) : [
+    try {
+      const saved = localStorage.getItem('instagram-highlights');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Filter out data URLs to prevent quota issues on next save
+        return parsed.map(h => ({
+          ...h,
+          cover: h.cover && !h.cover.startsWith('data:') ? h.cover : null
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load highlights from localStorage:', err);
+      // Clear corrupted data
+      localStorage.removeItem('instagram-highlights');
+    }
+    return [
       { id: '1', name: 'Highlights', cover: null, coverPosition: { x: 0, y: 0 }, coverZoom: 1, stories: [] },
       { id: '2', name: 'DJ Sets', cover: null, coverPosition: { x: 0, y: 0 }, coverZoom: 1, stories: [] },
       { id: '3', name: 'Studio', cover: null, coverPosition: { x: 0, y: 0 }, coverZoom: 1, stories: [] },
@@ -1685,9 +1699,30 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
     setEditPronouns('');
   };
 
-  // Save highlights to localStorage
+  // Save highlights to localStorage (only URLs, not data URLs)
   useEffect(() => {
-    localStorage.setItem('instagram-highlights', JSON.stringify(highlights));
+    try {
+      // Filter out any data URLs to prevent quota issues - only save Cloudinary URLs
+      const highlightsToSave = highlights.map(h => ({
+        ...h,
+        cover: h.cover && !h.cover.startsWith('data:') ? h.cover : null
+      }));
+      localStorage.setItem('instagram-highlights', JSON.stringify(highlightsToSave));
+    } catch (err) {
+      console.error('Failed to save highlights to localStorage:', err);
+      // If quota exceeded, try to clear and save without covers
+      if (err.name === 'QuotaExceededError') {
+        try {
+          const minimalHighlights = highlights.map(h => ({
+            ...h,
+            cover: null // Remove all covers to save space
+          }));
+          localStorage.setItem('instagram-highlights', JSON.stringify(minimalHighlights));
+        } catch (e) {
+          console.error('Could not save highlights even without covers:', e);
+        }
+      }
+    }
   }, [highlights]);
 
   // Highlight handlers
@@ -1713,7 +1748,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
     handleHighlightClick(newHighlight);
   };
 
-  const handleHighlightCoverUpload = (e) => {
+  const handleHighlightCoverUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -1721,27 +1756,51 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
     setHighlightPosition({ x: 0, y: 0 });
     setHighlightZoom(1);
 
+    // Helper to upload blob/file to Cloudinary
+    const uploadToCloudinary = async (blob) => {
+      const formData = new FormData();
+      formData.append('cover', blob, 'highlight-cover.jpg');
+      try {
+        const response = await api.post('/api/auth/highlight-cover', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data.coverUrl;
+      } catch (err) {
+        console.error('Failed to upload highlight cover:', err);
+        return null;
+      }
+    };
+
     if (file.type.startsWith('video/')) {
-      // Generate thumbnail from video
+      // Generate thumbnail from video then upload
       const video = document.createElement('video');
       video.src = URL.createObjectURL(file);
       video.onloadedmetadata = () => {
         video.currentTime = 1;
       };
-      video.onseeked = () => {
+      video.onseeked = async () => {
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-        setHighlightCover(canvas.toDataURL('image/jpeg', 0.8));
         URL.revokeObjectURL(video.src);
+
+        // Convert canvas to blob and upload
+        canvas.toBlob(async (blob) => {
+          if (blob) {
+            const coverUrl = await uploadToCloudinary(blob);
+            if (coverUrl) {
+              setHighlightCover(coverUrl);
+            }
+          }
+        }, 'image/jpeg', 0.8);
       };
     } else if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setHighlightCover(event.target?.result);
-      };
-      reader.readAsDataURL(file);
+      // Upload image directly
+      const coverUrl = await uploadToCloudinary(file);
+      if (coverUrl) {
+        setHighlightCover(coverUrl);
+      }
     }
   };
 

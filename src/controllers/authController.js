@@ -205,6 +205,45 @@ exports.uploadAvatar = async (req, res) => {
   }
 };
 
+// Upload highlight cover image
+exports.uploadHighlightCover = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const userId = req.userId;
+    let coverUrl;
+
+    // Check if using cloud storage (Cloudinary)
+    if (useCloudStorage()) {
+      // Upload to Cloudinary
+      const uploadResult = await cloudinaryService.uploadBuffer(req.file.buffer, {
+        folder: 'postpanda/highlights',
+        resourceType: 'image',
+        transformation: [
+          { width: 300, height: 300, crop: 'fill' }
+        ]
+      });
+      coverUrl = uploadResult.secure_url;
+    } else {
+      // Local storage fallback
+      const filename = `highlight-${userId}-${Date.now()}${path.extname(req.file.originalname || '.jpg')}`;
+      const filepath = path.join(uploadDir, filename);
+      await fs.writeFile(filepath, req.file.buffer);
+      coverUrl = `/uploads/${filename}`;
+    }
+
+    res.json({
+      message: 'Highlight cover uploaded successfully',
+      coverUrl
+    });
+  } catch (error) {
+    console.error('Upload highlight cover error:', error);
+    res.status(500).json({ error: 'Failed to upload highlight cover' });
+  }
+};
+
 // Instagram OAuth - Initiate Login (for signing in)
 exports.instagramAuthLogin = (req, res, next) => {
   if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {

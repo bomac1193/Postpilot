@@ -609,7 +609,9 @@ function GridPlanner() {
         newPosts.push({
           id: content._id,
           image: content.mediaUrl,
+          images: content.carouselImages?.length > 0 ? content.carouselImages : [content.mediaUrl],
           caption: content.caption || content.title || '',
+          hashtags: content.hashtags || [],
           color: '#8b5cf6',
           mediaType: content.mediaType || 'image',
           gridPosition: position,
@@ -641,6 +643,16 @@ function GridPlanner() {
     // Update grid posts
     if (newPosts.length > 0) {
       setGridPosts([...gridPosts, ...newPosts]);
+      // Refresh from server to ensure state is synced
+      if (gridId) {
+        try {
+          const response = await gridApi.getById(gridId);
+          const freshGrid = response.grid || response;
+          setGrids(prev => prev.map(g => g._id === freshGrid._id ? freshGrid : g));
+        } catch (err) {
+          console.error('Failed to refresh grid after upload:', err);
+        }
+      }
     }
 
     setUploading(false);

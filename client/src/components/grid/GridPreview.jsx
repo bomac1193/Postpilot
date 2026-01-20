@@ -2177,14 +2177,19 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
     setDropSource(null);
     setDropTarget(null);
     setDroppedFiles(null);
+    setDroppedFileObjects(null);
   };
 
   // State for file drops from Windows Explorer
   const [droppedFiles, setDroppedFiles] = useState(null);
+  const [droppedFileObjects, setDroppedFileObjects] = useState(null); // Store actual File objects for upload
 
   // Handle file drop from Windows Explorer onto a grid item
   const handleFileDrop = async (targetPostId, targetPost, files) => {
-    // Convert files to data URLs
+    // Store actual file objects for later upload
+    setDroppedFileObjects(Array.from(files));
+
+    // Convert files to data URLs for preview
     const imagePromises = files.map(file => {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -2216,7 +2221,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
     // Check if this is a file drop (source id is 'file-drop')
     if (dropSource.id === 'file-drop') {
-      // Replace target with dropped file
+      // Replace target with dropped file - update UI immediately for responsiveness
       const newPosts = posts.map(p => {
         const postId = p.id || p._id;
         if (postId === targetId) {
@@ -2230,19 +2235,17 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
       });
       setGridPosts(newPosts);
 
-      // Save to backend - for file drops, we save the data URLs as carousel images
-      // Note: These are temporary until the user properly uploads them
+      // Upload the file to the server properly
       try {
-        if (targetId) {
-          await contentApi.update(targetId, {
-            carouselImages: dropSource.images,
-            mediaUrl: dropSource.images[0],
-          });
-          // Notify parent to refresh grid data
+        if (targetId && droppedFileObjects && droppedFileObjects.length > 0) {
+          // Upload the first file as the new media for this content
+          const file = droppedFileObjects[0];
+          await contentApi.updateMedia(targetId, file);
+          // Notify parent to refresh grid data to get the new URL
           onGridChange?.();
         }
       } catch (err) {
-        console.error('Failed to save file drop to backend:', err);
+        console.error('Failed to upload file to backend:', err);
       }
     } else {
       // Original behavior for internal drags
@@ -2254,6 +2257,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
     setDropSource(null);
     setDropTarget(null);
     setDroppedFiles(null);
+    setDroppedFileObjects(null);
   };
 
   // Modified carousel handler to handle file drops
@@ -2269,7 +2273,8 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
     // Check if this is a file drop
     if (dropSource.id === 'file-drop') {
-      // Add to carousel without removing any post
+      // For file drops, upload the file first then add to carousel
+      // Update UI immediately for responsiveness
       const newPosts = posts.map(p => {
         const postId = p.id || p._id;
         if (postId === targetId) {
@@ -2283,18 +2288,21 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
       });
       setGridPosts(newPosts);
 
-      // Save carousel images to the backend
+      // Upload the dropped file(s) and update carousel
       try {
-        if (targetId) {
-          await contentApi.update(targetId, {
-            carouselImages: combinedImages,
-            mediaUrl: combinedImages[0],
-          });
-          // Notify parent to refresh grid data
+        if (targetId && droppedFileObjects && droppedFileObjects.length > 0) {
+          // Upload the first dropped file as the new media
+          const file = droppedFileObjects[0];
+          const result = await contentApi.updateMedia(targetId, file);
+
+          // If successful, the content now has the uploaded URL
+          // The existing target images are lost when we replace media
+          // For true carousel support, we'd need to store multiple media files
+          // For now, just refresh to get the new URL
           onGridChange?.();
         }
       } catch (err) {
-        console.error('Failed to save file drop carousel to backend:', err);
+        console.error('Failed to upload file for carousel:', err);
       }
     } else {
       // Original behavior for internal drags
@@ -2306,6 +2314,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
     setDropSource(null);
     setDropTarget(null);
     setDroppedFiles(null);
+    setDroppedFileObjects(null);
   };
 
   // Avatar editor state

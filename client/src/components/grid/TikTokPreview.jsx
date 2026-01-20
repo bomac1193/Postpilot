@@ -727,11 +727,30 @@ function TikTokPreview({ showRowHandles = true }) {
 
     const videoId = selectedVideo._id || selectedVideo.id;
 
+    // Helper to normalize IDs for comparison
+    const normalizeId = (id) => (id?._id || id?.id || id || '').toString();
+    const videoIdStr = normalizeId(videoId);
+
     try {
       await api.delete(`/api/content/${videoId}`);
 
+      // Update global reels state
       const updatedVideos = reels.filter(v => (v._id || v.id) !== videoId);
       setReels(updatedVideos);
+
+      // Also update the current collection's reels for instant UI update
+      if (currentReelCollection) {
+        const collectionId = currentReelCollection._id || currentReelCollection.id;
+        const updatedReels = currentReelCollection.reels?.filter(r => {
+          const contentIdStr = normalizeId(r.contentId);
+          return contentIdStr !== videoIdStr;
+        }) || [];
+
+        // Re-order remaining reels
+        updatedReels.forEach((r, i) => { r.order = i; });
+
+        updateReelCollection(collectionId, { ...currentReelCollection, reels: updatedReels });
+      }
 
       setShowVideoEditor(false);
       setSelectedVideo(null);

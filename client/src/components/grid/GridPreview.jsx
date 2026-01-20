@@ -1090,12 +1090,30 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
     const reelId = selectedReel._id || selectedReel.id;
 
+    // Helper to normalize IDs for comparison
+    const normalizeId = (id) => (id?._id || id?.id || id || '').toString();
+    const reelIdStr = normalizeId(reelId);
+
     try {
       await api.delete(`/api/content/${reelId}`);
 
-      // Remove from local state
+      // Remove from global reels state
       const updatedReels = reels.filter(r => (r._id || r.id) !== reelId);
       setReels(updatedReels);
+
+      // Also update the current collection's reels for instant UI update
+      if (currentReelCollection) {
+        const collectionId = currentReelCollection._id || currentReelCollection.id;
+        const updatedCollectionReels = currentReelCollection.reels?.filter(r => {
+          const contentIdStr = normalizeId(r.contentId);
+          return contentIdStr !== reelIdStr;
+        }) || [];
+
+        // Re-order remaining reels
+        updatedCollectionReels.forEach((r, i) => { r.order = i; });
+
+        updateReelCollection(collectionId, { ...currentReelCollection, reels: updatedCollectionReels });
+      }
 
       // Close the editor
       setShowReelEditor(false);

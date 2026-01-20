@@ -1749,7 +1749,14 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   }, [highlights, isVerified, highlightsLoaded]);
 
   // Highlight handlers
+  const highlightDragOccurredRef = useRef(false);
+
   const handleHighlightClick = (highlight) => {
+    // Don't open modal if we just finished dragging
+    if (highlightDragOccurredRef.current) {
+      highlightDragOccurredRef.current = false;
+      return;
+    }
     setEditingHighlight(highlight);
     setHighlightName(highlight.name);
     setHighlightCover(highlight.cover);
@@ -1893,6 +1900,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
   // Highlight drag-to-reorder handlers
   const handleHighlightDragStart = (e, highlightId) => {
+    highlightDragOccurredRef.current = true;
     setDraggingHighlightId(highlightId);
     e.dataTransfer.setData('application/highlight-id', highlightId);
     e.dataTransfer.effectAllowed = 'move';
@@ -1912,6 +1920,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
   const handleHighlightDrop = (e, targetId) => {
     e.preventDefault();
+    e.stopPropagation();
     const sourceId = e.dataTransfer.getData('application/highlight-id');
 
     if (sourceId && sourceId !== targetId) {
@@ -1919,9 +1928,9 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
       const targetIndex = highlights.findIndex(h => h.id === targetId);
 
       if (sourceIndex !== -1 && targetIndex !== -1) {
+        // Swap the highlights instead of shifting
         const newHighlights = [...highlights];
-        const [removed] = newHighlights.splice(sourceIndex, 1);
-        newHighlights.splice(targetIndex, 0, removed);
+        [newHighlights[sourceIndex], newHighlights[targetIndex]] = [newHighlights[targetIndex], newHighlights[sourceIndex]];
         setHighlights(newHighlights);
       }
     }

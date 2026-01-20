@@ -654,51 +654,69 @@ function PostPreviewModal({ post, onClose, onSave }) {
 
   // Drag and drop handlers for reordering carousel images
   const handleDragStart = (e, index) => {
+    e.stopPropagation();
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', index.toString());
+    // Set a custom drag image
+    const target = e.currentTarget;
+    if (target) {
+      e.dataTransfer.setDragImage(target, 32, 32);
+    }
   };
 
   const handleDragOver = (e, index) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     if (draggedIndex !== null && draggedIndex !== index) {
       setDragOverIndex(index);
     }
   };
 
-  const handleDragLeave = () => {
-    setDragOverIndex(null);
+  const handleDragLeave = (e) => {
+    e.stopPropagation();
+    // Only clear if we're leaving the element entirely
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverIndex(null);
+    }
   };
 
   const handleDrop = (e, targetIndex) => {
     e.preventDefault();
-    if (draggedIndex === null || draggedIndex === targetIndex) {
+    e.stopPropagation();
+
+    const sourceIndex = draggedIndex;
+
+    if (sourceIndex === null || sourceIndex === targetIndex) {
       setDraggedIndex(null);
       setDragOverIndex(null);
       return;
     }
 
-    // Reorder images
+    // Swap images (not insert - swap positions)
     const newImages = [...carouselImages];
-    const [draggedImage] = newImages.splice(draggedIndex, 1);
-    newImages.splice(targetIndex, 0, draggedImage);
+    const temp = newImages[sourceIndex];
+    newImages[sourceIndex] = newImages[targetIndex];
+    newImages[targetIndex] = temp;
     setCarouselImages(newImages);
 
-    // Update current index if needed
-    if (currentIndex === draggedIndex) {
+    // Update current index if it was one of the swapped items
+    if (currentIndex === sourceIndex) {
       setCurrentIndex(targetIndex);
-    } else if (draggedIndex < currentIndex && targetIndex >= currentIndex) {
-      setCurrentIndex(currentIndex - 1);
-    } else if (draggedIndex > currentIndex && targetIndex <= currentIndex) {
-      setCurrentIndex(currentIndex + 1);
+    } else if (currentIndex === targetIndex) {
+      setCurrentIndex(sourceIndex);
     }
 
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (e) => {
+    e.stopPropagation();
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -881,41 +899,50 @@ function PostPreviewModal({ post, onClose, onSave }) {
                   <div className="space-y-2">
                     <p className="text-xs text-dark-400 flex items-center gap-1">
                       <GripVertical className="w-3 h-3" />
-                      Drag to reorder carousel images
+                      Drag thumbnails to swap positions
                     </p>
-                    <div className="flex gap-2 overflow-x-auto pb-2">
+                    <div className="flex gap-3 overflow-x-auto pb-2 px-1">
                       {carouselImages.map((img, idx) => (
                         <div
-                          key={idx}
+                          key={`carousel-thumb-${idx}-${img.substring(0, 20)}`}
                           draggable="true"
                           onDragStart={(e) => handleDragStart(e, idx)}
                           onDragOver={(e) => handleDragOver(e, idx)}
-                          onDragLeave={handleDragLeave}
+                          onDragLeave={(e) => handleDragLeave(e)}
                           onDrop={(e) => handleDrop(e, idx)}
-                          onDragEnd={handleDragEnd}
+                          onDragEnd={(e) => handleDragEnd(e)}
                           onClick={() => goToIndex(idx)}
-                          className={`w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 cursor-grab active:cursor-grabbing transition-all relative select-none ${
-                            idx === currentIndex
+                          className={`w-20 h-20 flex-shrink-0 rounded-lg border-3 cursor-grab active:cursor-grabbing transition-all relative select-none ${
+                            dragOverIndex === idx
+                              ? 'border-accent-blue scale-110 ring-4 ring-accent-blue/50 z-10'
+                              : idx === currentIndex
                               ? 'border-accent-purple ring-2 ring-accent-purple/50'
-                              : dragOverIndex === idx
-                              ? 'border-accent-blue scale-110 bg-accent-blue/20'
-                              : 'border-dark-600 hover:border-dark-400'
-                          } ${draggedIndex === idx ? 'opacity-50 scale-95' : ''}`}
+                              : 'border-dark-500 hover:border-dark-300'
+                          } ${draggedIndex === idx ? 'opacity-40 scale-90' : ''}`}
+                          style={{ touchAction: 'none' }}
                         >
+                          {/* Image - no pointer events so parent handles drag */}
                           <img
                             src={img}
                             alt={`Slide ${idx + 1}`}
-                            className="w-full h-full object-cover pointer-events-none select-none"
+                            className="w-full h-full object-cover rounded-md pointer-events-none"
                             draggable="false"
+                            onDragStart={(e) => e.preventDefault()}
                           />
-                          {/* Drag indicator overlay */}
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors">
-                            <GripVertical className="w-4 h-4 text-white opacity-0 hover:opacity-100 drop-shadow-lg" />
-                          </div>
-                          {/* Position number */}
-                          <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center text-xs text-white font-medium">
+                          {/* Position number badge */}
+                          <div className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/80 flex items-center justify-center text-xs text-white font-bold pointer-events-none">
                             {idx + 1}
                           </div>
+                          {/* Drag handle indicator */}
+                          <div className="absolute bottom-1 right-1 p-1 rounded bg-black/60 pointer-events-none">
+                            <GripVertical className="w-3 h-3 text-white/80" />
+                          </div>
+                          {/* Drop indicator overlay */}
+                          {dragOverIndex === idx && draggedIndex !== idx && (
+                            <div className="absolute inset-0 bg-accent-blue/30 rounded-md flex items-center justify-center pointer-events-none">
+                              <span className="text-white text-xs font-bold bg-accent-blue px-2 py-1 rounded">SWAP</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

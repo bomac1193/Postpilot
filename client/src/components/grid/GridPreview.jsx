@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical, Replace, Layers, Trash2, Eye, EyeOff, Play, ChevronDown, FolderPlus, Pencil, LayoutGrid, Loader2 } from 'lucide-react';
+import { User, Upload, ZoomIn, ZoomOut, X, Check, Camera, RotateCcw, Save, GripVertical, Replace, Layers, Trash2, Eye, EyeOff, Play, ChevronDown, FolderPlus, Pencil, LayoutGrid, Loader2, CalendarPlus, ChevronRight } from 'lucide-react';
 import { setInternalDragActive } from '../../utils/dragState';
 import { generateVideoThumbnail, formatDuration } from '../../utils/videoUtils';
-import { contentApi, gridApi, reelCollectionApi } from '../../lib/api';
+import { contentApi, gridApi, reelCollectionApi, rolloutApi } from '../../lib/api';
 import api from '../../lib/api';
 import ReelPlayer from './ReelPlayer';
 import ReelThumbnailSelector from './ReelThumbnailSelector';
@@ -477,6 +477,145 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   );
 }
 
+// Rollout Picker Modal - for adding collections to rollouts
+function RolloutPickerModal({ collectionId, collectionName, platform, rollouts, onSelect, onClose }) {
+  const [expandedRolloutId, setExpandedRolloutId] = useState(null);
+
+  // Get platform color for badge
+  const getPlatformColor = () => {
+    switch (platform) {
+      case 'instagram-reels':
+        return '#c13584';
+      case 'tiktok-reels':
+        return '#ff0050';
+      default:
+        return '#8b5cf6';
+    }
+  };
+
+  const platformColor = getPlatformColor();
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-dark-800 rounded-xl w-full max-w-md border border-dark-700 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-dark-700 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-medium text-white">Add to Rollout</h3>
+            <p className="text-sm text-dark-400 mt-0.5">
+              Adding "<span style={{ color: platformColor }}>{collectionName}</span>" to a rollout
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1 text-dark-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Rollout List */}
+        <div className="max-h-80 overflow-y-auto">
+          {rollouts.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-dark-400 mb-2">No rollouts created yet</p>
+              <p className="text-xs text-dark-500">Create a rollout in the Rollout Planner first</p>
+            </div>
+          ) : (
+            rollouts.map((rollout) => (
+              <div key={rollout.id} className="border-b border-dark-700 last:border-b-0">
+                {/* Rollout Header */}
+                <button
+                  onClick={() => setExpandedRolloutId(expandedRolloutId === rollout.id ? null : rollout.id)}
+                  className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-dark-750 transition-colors"
+                >
+                  <ChevronRight
+                    className={`w-4 h-4 text-dark-400 transition-transform ${
+                      expandedRolloutId === rollout.id ? 'rotate-90' : ''
+                    }`}
+                  />
+                  <div className="flex-1">
+                    <span className="font-medium text-white">{rollout.name}</span>
+                    <span className="text-xs text-dark-500 ml-2">
+                      {rollout.sections?.length || 0} sections
+                    </span>
+                  </div>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      rollout.status === 'active'
+                        ? 'bg-green-500/20 text-green-400'
+                        : rollout.status === 'completed'
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-dark-600 text-dark-300'
+                    }`}
+                  >
+                    {rollout.status}
+                  </span>
+                </button>
+
+                {/* Sections List */}
+                {expandedRolloutId === rollout.id && (
+                  <div className="bg-dark-750 px-4 py-2">
+                    {rollout.sections?.length === 0 ? (
+                      <p className="text-sm text-dark-500 py-2 text-center">No sections in this rollout</p>
+                    ) : (
+                      rollout.sections
+                        .sort((a, b) => a.order - b.order)
+                        .map((section, idx) => {
+                          const isAlreadyAdded = section.collectionIds?.includes(collectionId);
+                          return (
+                            <button
+                              key={section.id}
+                              onClick={() => !isAlreadyAdded && onSelect(rollout.id, section.id)}
+                              disabled={isAlreadyAdded}
+                              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg mb-1 last:mb-0 transition-colors ${
+                                isAlreadyAdded
+                                  ? 'bg-dark-600/50 cursor-not-allowed'
+                                  : 'hover:bg-dark-600'
+                              }`}
+                            >
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: section.color || '#8b5cf6' }}
+                              />
+                              <span className="flex-1 text-sm text-left">
+                                <span className="text-dark-400">Phase {idx + 1}:</span>{' '}
+                                <span className={isAlreadyAdded ? 'text-dark-500' : 'text-dark-200'}>
+                                  {section.name}
+                                </span>
+                              </span>
+                              {isAlreadyAdded ? (
+                                <span className="text-xs text-dark-500">Already added</span>
+                              ) : (
+                                <span className="text-xs text-accent-purple opacity-0 group-hover:opacity-100">
+                                  Add here
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-dark-700 bg-dark-750">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 text-sm text-dark-300 hover:text-white hover:bg-dark-600 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridId }) {
   const cols = layout?.cols || 3;
   const user = useAppStore((state) => state.user);
@@ -577,6 +716,12 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   const [editingReelCollectionName, setEditingReelCollectionName] = useState('');
   const [showDeleteReelCollectionConfirm, setShowDeleteReelCollectionConfirm] = useState(null);
   const [isLoadingCollections, setIsLoadingCollections] = useState(true);
+
+  // Rollout picker state (for adding reel collections to rollouts)
+  const [showRolloutPicker, setShowRolloutPicker] = useState(false);
+  const [rolloutPickerCollectionId, setRolloutPickerCollectionId] = useState(null);
+  const rollouts = useAppStore((state) => state.rollouts);
+  const setRollouts = useAppStore((state) => state.setRollouts);
 
   // Fetch reel collections on mount (always fetch fresh data to ensure populated content)
   useEffect(() => {
@@ -2445,6 +2590,18 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
                             </span>
                             <div className="hidden group-hover:flex items-center gap-1">
                               <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRolloutPickerCollectionId(collection._id || collection.id);
+                                  setShowRolloutPicker(true);
+                                  setShowReelCollectionSelector(false);
+                                }}
+                                className="p-1 text-dark-400 hover:text-green-400 hover:bg-dark-500 rounded"
+                                title="Add to Rollout"
+                              >
+                                <CalendarPlus className="w-3.5 h-3.5" />
+                              </button>
+                              <button
                                 onClick={(e) => handleStartRenameReelCollection(e, collection)}
                                 className="p-1 text-dark-400 hover:text-accent-purple hover:bg-dark-500 rounded"
                               >
@@ -3174,6 +3331,35 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
           videoFile={pendingReelUpload}
           onSave={handleSaveThumbnail}
           onClose={handleCloseThumbnailSelector}
+        />
+      )}
+
+      {/* Rollout Picker Modal */}
+      {showRolloutPicker && rolloutPickerCollectionId && (
+        <RolloutPickerModal
+          collectionId={rolloutPickerCollectionId}
+          collectionName={instagramCollections.find(c => (c._id || c.id) === rolloutPickerCollectionId)?.name || 'Collection'}
+          platform="instagram-reels"
+          rollouts={rollouts}
+          onSelect={async (rolloutId, sectionId) => {
+            try {
+              const data = await rolloutApi.addCollectionToSection(rolloutId, sectionId, rolloutPickerCollectionId);
+              // Update rollouts in store
+              setRollouts(rollouts.map(r =>
+                (r._id || r.id) === rolloutId
+                  ? { ...data.rollout, id: data.rollout._id }
+                  : r
+              ));
+            } catch (err) {
+              console.error('Failed to add collection to rollout:', err);
+            }
+            setShowRolloutPicker(false);
+            setRolloutPickerCollectionId(null);
+          }}
+          onClose={() => {
+            setShowRolloutPicker(false);
+            setRolloutPickerCollectionId(null);
+          }}
         />
       )}
     </div>

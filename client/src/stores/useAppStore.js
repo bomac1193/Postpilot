@@ -500,6 +500,7 @@ export const useAppStore = create(
       }),
 
       // Rollout actions
+      setRollouts: (rollouts) => set({ rollouts }),
       addRollout: (rollout) => set((state) => {
         const newRollout = {
           id: crypto.randomUUID(),

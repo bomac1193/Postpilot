@@ -1,11 +1,11 @@
-# PostPilot Quick Start Guide
+# Postpanda Quick Start Guide
 
-Get up and running with PostPilot in 5 minutes!
+Get up and running with Postpanda in 5 minutes!
 
 ## Step 1: Install Dependencies
 
 ```bash
-cd postpilot
+cd postpanda
 npm install
 ```
 
@@ -25,7 +25,7 @@ For basic functionality, you only need to set these in your `.env` file:
 
 ```env
 PORT=3000
-MONGODB_URI=mongodb://localhost:27017/postpilot
+MONGODB_URI=mongodb://localhost:27017/postpanda
 SESSION_SECRET=any-random-string-here
 JWT_SECRET=another-random-string-here
 ```
@@ -65,7 +65,7 @@ docker run -d -p 27017:27017 --name mongodb mongo:latest
 4. Get your connection string
 5. Update `.env`:
 ```env
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/postpilot
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/postpanda
 ```
 
 ## Step 4: Start the Server
@@ -81,11 +81,11 @@ npm start
 You should see:
 ```
 ✅ MongoDB Connected Successfully
-📊 Database: postpilot
+📊 Database: postpanda
 
 ╔═══════════════════════════════════════════════════════╗
 ║                                                       ║
-║     ✈️  PostPilot - AI Content Planner Started       ║
+║     ✈️  Postpanda - AI Content Planner Started       ║
 ║                                                       ║
 ║     🌐 Server: http://localhost:3000                 ║
 ║     📊 API: http://localhost:3000/api              ║
@@ -222,7 +222,7 @@ View your data:
 ```bash
 # Connect to MongoDB shell
 mongo
-use postpilot
+use postpanda
 db.users.find()
 db.contents.find()
 db.grids.find()
@@ -232,7 +232,7 @@ db.grids.find()
 
 **Happy planning! ✈️**
 
-If you find PostPilot useful, consider:
+If you find Postpanda useful, consider:
 - ⭐ Starring the repo
 - 🐛 Reporting bugs
 - 💡 Suggesting features

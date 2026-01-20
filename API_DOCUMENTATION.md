@@ -1,4 +1,4 @@
-# PostPilot API Documentation
+# Postpanda API Documentation
 
 ## Base URL
 ```

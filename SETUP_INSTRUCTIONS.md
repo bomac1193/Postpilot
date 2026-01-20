@@ -1,8 +1,8 @@
-# PostPilot v2.0 - Complete Setup Instructions
+# Postpanda v2.0 - Complete Setup Instructions
 
 ## 🎉 What's New in v2.0
 
-PostPilot now has **FULL Instagram & TikTok posting** with **automated scheduling** and **drag-and-drop collections**!
+Postpanda now has **FULL Instagram & TikTok posting** with **automated scheduling** and **drag-and-drop collections**!
 
 ## 📋 Quick Start (5 Minutes)
 
@@ -13,16 +13,16 @@ sudo systemctl start mongod
 sudo systemctl status mongod  # Verify it's running
 ```
 
-### 2. Start PostPilot
+### 2. Start Postpanda
 
 ```bash
-cd /home/sphinxy/postpilot
+cd /home/sphinxy/postpanda
 npm run dev
 ```
 
 You'll see:
 ```
-✈️  PostPilot - AI Content Planner Started
+✈️  Postpanda - AI Content Planner Started
 🌐 Server: http://localhost:3000
 🚀 Starting scheduling service...
 ✅ Scheduling service started
@@ -51,7 +51,7 @@ To enable Instagram and TikTok posting, you need API credentials.
 1. Go to https://developers.facebook.com/apps/
 2. Click "Create App"
 3. Select type: "Business"
-4. Enter app name: "PostPilot" (or your choice)
+4. Enter app name: "Postpanda" (or your choice)
 5. Click "Create App"
 
 **Step 2: Add Instagram Product**
@@ -80,7 +80,7 @@ To enable Instagram and TikTok posting, you need API credentials.
 **Step 5: Update .env**
 
 ```bash
-nano /home/sphinxy/postpilot/.env
+nano /home/sphinxy/postpanda/.env
 ```
 
 Add these lines:
@@ -99,7 +99,7 @@ npm run dev  # Start again
 
 **Step 7: Connect Your Account**
 
-1. In PostPilot, go to Settings
+1. In Postpanda, go to Settings
 2. Click "Connect Instagram"
 3. Login with your Instagram account
 4. Click "Authorize"
@@ -120,7 +120,7 @@ npm run dev  # Start again
 1. Go to "Manage apps"
 2. Click "Connect an app"
 3. Fill in app details:
-   - App name: "PostPilot"
+   - App name: "Postpanda"
    - Category: Social/Content
 4. Add products: "Login Kit" and "Content Posting API"
 
@@ -141,7 +141,7 @@ npm run dev  # Start again
 **Step 5: Update .env**
 
 ```bash
-nano /home/sphinxy/postpilot/.env
+nano /home/sphinxy/postpanda/.env
 ```
 
 Add:
@@ -157,7 +157,7 @@ TIKTOK_REDIRECT_URI=http://localhost:3000/api/auth/tiktok/callback
 # Restart server
 npm run dev
 
-# In PostPilot UI:
+# In Postpanda UI:
 # Settings → Connect TikTok → Authorize
 ```
 
@@ -364,4 +364,4 @@ Deploy to cloud server with public IP.
 ---
 
 **Ready to automate your social media?**  
-Start PostPilot and create your first collection! 🚀
+Start Postpanda and create your first collection! 🚀

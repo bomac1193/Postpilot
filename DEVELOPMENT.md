@@ -1,6 +1,6 @@
-# PostPilot - Development Guide
+# Postpanda - Development Guide
 
-This guide covers everything you need to know to develop, extend, and maintain PostPilot.
+This guide covers everything you need to know to develop, extend, and maintain Postpanda.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This guide covers everything you need to know to develop, extend, and maintain P
 
 ```bash
 # Clone or navigate to project
-cd postpilot
+cd postpanda
 
 # Install dependencies
 npm install
@@ -50,7 +50,7 @@ npm run dev
 ### Directory Structure
 
 ```
-postpilot/
+postpanda/
 ├── src/
 │   ├── config/          # Configuration files
 │   │   └── database.js  # MongoDB connection
@@ -421,12 +421,12 @@ FRONTEND_URL=https://yourdomain.com
    ```bash
    # Using PM2 (recommended)
    npm install -g pm2
-   pm2 start src/server.js --name postpilot
+   pm2 start src/server.js --name postpanda
    pm2 save
    pm2 startup
 
    # Or using systemd service
-   # Create /etc/systemd/system/postpilot.service
+   # Create /etc/systemd/system/postpanda.service
    ```
 
 4. **Set up Nginx (optional):**

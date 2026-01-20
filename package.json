@@ -1,5 +1,5 @@
 {
-  "name": "postpilot",
+  "name": "postpanda",
   "version": "2.0.0",
   "description": "AI-powered social media content planner and scheduler with grid preview",
   "main": "src/server.js",

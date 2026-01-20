@@ -1,8 +1,8 @@
-# PostPilot - Project Summary
+# Postpanda - Project Summary
 
 ## 🎯 Project Overview
 
-**PostPilot** is a full-stack Node.js application for social media content planning and scheduling with advanced AI-powered analytics and recommendations.
+**Postpanda** is a full-stack Node.js application for social media content planning and scheduling with advanced AI-powered analytics and recommendations.
 
 ### Key Features Implemented
 
@@ -44,7 +44,7 @@
 ## 📁 Complete File Structure
 
 ```
-postpilot/
+postpanda/
 ├── src/
 │   ├── config/
 │   │   └── database.js              # MongoDB connection config

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronDown, Trash2, Edit3, Check, X, GripVertical, Folder, Search, Tag, Palette, Youtube, Instagram, LayoutGrid } from 'lucide-react';
+import { Plus, ChevronDown, Trash2, Edit3, Check, X, GripVertical, Folder, Search, Tag, Palette, Youtube, Instagram, LayoutGrid, Film, Loader2 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
-import { gridApi } from '../lib/api';
+import { gridApi, reelCollectionApi, rolloutApi } from '../lib/api';
 
 // TikTok icon component
 function TikTokIcon({ className }) {
@@ -28,20 +28,17 @@ const SECTION_COLORS = [
 
 function RolloutPlanner() {
   const rollouts = useAppStore((state) => state.rollouts);
+  const setRollouts = useAppStore((state) => state.setRollouts);
   const currentRolloutId = useAppStore((state) => state.currentRolloutId);
   const youtubeCollections = useAppStore((state) => state.youtubeCollections);
-  const addRollout = useAppStore((state) => state.addRollout);
-  const updateRollout = useAppStore((state) => state.updateRollout);
-  const deleteRollout = useAppStore((state) => state.deleteRollout);
   const setCurrentRollout = useAppStore((state) => state.setCurrentRollout);
-  const addRolloutSection = useAppStore((state) => state.addRolloutSection);
-  const updateRolloutSection = useAppStore((state) => state.updateRolloutSection);
-  const deleteRolloutSection = useAppStore((state) => state.deleteRolloutSection);
-  const reorderRolloutSections = useAppStore((state) => state.reorderRolloutSections);
-  const addCollectionToSection = useAppStore((state) => state.addCollectionToSection);
-  const removeCollectionFromSection = useAppStore((state) => state.removeCollectionFromSection);
 
-  const currentRollout = rollouts.find((r) => r.id === currentRolloutId) || null;
+  // Find current rollout - support both backend _id and local id
+  const currentRollout = rollouts.find((r) => (r._id || r.id) === currentRolloutId) || null;
+
+  // Loading states
+  const [loadingRollouts, setLoadingRollouts] = useState(false);
+  const [savingRollout, setSavingRollout] = useState(false);
 
   // Grid metadata for colors
   const gridMeta = useAppStore((state) => state.gridMeta);
@@ -58,6 +55,10 @@ function RolloutPlanner() {
   const [grids, setGrids] = useState([]);
   const [loadingGrids, setLoadingGrids] = useState(false);
 
+  // Backend reel collections (IG/TikTok Reels)
+  const [reelCollections, setReelCollections] = useState([]);
+  const [loadingReelCollections, setLoadingReelCollections] = useState(false);
+
   // Fetch grids from backend
   const fetchGrids = useCallback(async () => {
     try {
@@ -71,9 +72,46 @@ function RolloutPlanner() {
     }
   }, []);
 
+  // Fetch reel collections from backend
+  const fetchReelCollections = useCallback(async () => {
+    try {
+      setLoadingReelCollections(true);
+      const collections = await reelCollectionApi.getAll();
+      setReelCollections(collections || []);
+    } catch (err) {
+      console.error('Failed to fetch reel collections:', err);
+    } finally {
+      setLoadingReelCollections(false);
+    }
+  }, []);
+
+  // Fetch rollouts from backend
+  const fetchRollouts = useCallback(async () => {
+    try {
+      setLoadingRollouts(true);
+      const data = await rolloutApi.getAll();
+      // Transform backend rollouts to use 'id' field for consistency
+      const transformedRollouts = (data.rollouts || []).map(r => ({
+        ...r,
+        id: r._id, // Use _id as id for consistency
+      }));
+      setRollouts(transformedRollouts);
+      // Auto-select first rollout if none selected
+      if (transformedRollouts.length > 0 && !currentRolloutId) {
+        setCurrentRollout(transformedRollouts[0]._id);
+      }
+    } catch (err) {
+      console.error('Failed to fetch rollouts:', err);
+    } finally {
+      setLoadingRollouts(false);
+    }
+  }, [setRollouts, currentRolloutId, setCurrentRollout]);
+
   useEffect(() => {
     fetchGrids();
-  }, [fetchGrids]);
+    fetchReelCollections();
+    fetchRollouts();
+  }, [fetchGrids, fetchReelCollections, fetchRollouts]);
 
   // Combine all collections from all platforms
   const allCollections = [
@@ -101,25 +139,66 @@ function RolloutPlanner() {
       tags: [],
       itemCount: g.cells?.filter(c => !c.isEmpty).length || 0,
     })),
+    // Instagram Reel collections
+    ...reelCollections.filter(rc => rc.platform === 'instagram').map(rc => ({
+      id: rc._id,
+      name: rc.name,
+      platform: 'instagram-reels',
+      color: rc.color || null,
+      tags: rc.tags || [],
+      itemCount: rc.reels?.length || 0,
+    })),
+    // TikTok Reel collections
+    ...reelCollections.filter(rc => rc.platform === 'tiktok').map(rc => ({
+      id: rc._id,
+      name: rc.name,
+      platform: 'tiktok-reels',
+      color: rc.color || null,
+      tags: rc.tags || [],
+      itemCount: rc.reels?.length || 0,
+    })),
   ];
 
-  const handleCreateRollout = () => {
+  // Create rollout via API
+  const handleCreateRollout = async () => {
     if (!newRolloutName.trim()) return;
-    addRollout({ name: newRolloutName.trim() });
-    setNewRolloutName('');
-    setIsCreating(false);
-    setDropdownOpen(false);
+    try {
+      setSavingRollout(true);
+      const data = await rolloutApi.create({ name: newRolloutName.trim() });
+      const newRollout = { ...data.rollout, id: data.rollout._id };
+      setRollouts([newRollout, ...rollouts]);
+      setCurrentRollout(newRollout._id);
+      setNewRolloutName('');
+      setIsCreating(false);
+      setDropdownOpen(false);
+    } catch (err) {
+      console.error('Failed to create rollout:', err);
+      alert('Failed to create rollout');
+    } finally {
+      setSavingRollout(false);
+    }
   };
 
   const handleSelectRollout = (rollout) => {
-    setCurrentRollout(rollout.id);
+    setCurrentRollout(rollout._id || rollout.id);
     setDropdownOpen(false);
   };
 
-  const handleDeleteRollout = () => {
+  // Delete rollout via API
+  const handleDeleteRollout = async () => {
     if (!currentRolloutId) return;
     if (window.confirm('Delete this rollout?')) {
-      deleteRollout(currentRolloutId);
+      try {
+        setSavingRollout(true);
+        await rolloutApi.delete(currentRolloutId);
+        setRollouts(rollouts.filter(r => (r._id || r.id) !== currentRolloutId));
+        setCurrentRollout(null);
+      } catch (err) {
+        console.error('Failed to delete rollout:', err);
+        alert('Failed to delete rollout');
+      } finally {
+        setSavingRollout(false);
+      }
     }
   };
 
@@ -129,32 +208,148 @@ function RolloutPlanner() {
     setEditingName(true);
   };
 
-  const handleSaveName = () => {
+  // Update rollout name via API
+  const handleSaveName = async () => {
     if (!currentRolloutId || !editedName.trim()) return;
-    updateRollout(currentRolloutId, { name: editedName.trim() });
-    setEditingName(false);
+    try {
+      setSavingRollout(true);
+      const data = await rolloutApi.update(currentRolloutId, { name: editedName.trim() });
+      setRollouts(rollouts.map(r =>
+        (r._id || r.id) === currentRolloutId
+          ? { ...data.rollout, id: data.rollout._id }
+          : r
+      ));
+      setEditingName(false);
+    } catch (err) {
+      console.error('Failed to update rollout:', err);
+      alert('Failed to update rollout');
+    } finally {
+      setSavingRollout(false);
+    }
   };
 
-  const handleAddSection = () => {
+  // Add section via API
+  const handleAddSection = async () => {
     if (!currentRolloutId) return;
-    addRolloutSection(currentRolloutId, {
-      name: `Phase ${(currentRollout?.sections?.length || 0) + 1}`,
-    });
+    try {
+      setSavingRollout(true);
+      const data = await rolloutApi.addSection(currentRolloutId, {
+        name: `Phase ${(currentRollout?.sections?.length || 0) + 1}`,
+      });
+      setRollouts(rollouts.map(r =>
+        (r._id || r.id) === currentRolloutId
+          ? { ...data.rollout, id: data.rollout._id }
+          : r
+      ));
+    } catch (err) {
+      console.error('Failed to add section:', err);
+      alert('Failed to add section');
+    } finally {
+      setSavingRollout(false);
+    }
   };
 
   const handleDragStart = (index) => {
     setDraggedSectionIndex(index);
   };
 
-  const handleDragOver = (e, index) => {
+  // Reorder sections via API
+  const handleDragOver = async (e, index) => {
     e.preventDefault();
     if (draggedSectionIndex === null || draggedSectionIndex === index) return;
-    reorderRolloutSections(currentRolloutId, draggedSectionIndex, index);
+
+    // Optimistic update - reorder locally first
+    const sections = [...(currentRollout?.sections || [])];
+    const [movedSection] = sections.splice(draggedSectionIndex, 1);
+    sections.splice(index, 0, movedSection);
+
+    // Update order property
+    const reorderedSections = sections.map((s, i) => ({ ...s, order: i }));
+
+    setRollouts(rollouts.map(r =>
+      (r._id || r.id) === currentRolloutId
+        ? { ...r, sections: reorderedSections }
+        : r
+    ));
     setDraggedSectionIndex(index);
   };
 
-  const handleDragEnd = () => {
+  const handleDragEnd = async () => {
+    if (draggedSectionIndex === null || !currentRolloutId) {
+      setDraggedSectionIndex(null);
+      return;
+    }
+
+    // Persist to backend
+    try {
+      const sectionIds = currentRollout?.sections?.map(s => s.id) || [];
+      await rolloutApi.reorderSections(currentRolloutId, sectionIds);
+    } catch (err) {
+      console.error('Failed to save section reorder:', err);
+      // Refresh to get correct order
+      fetchRollouts();
+    }
     setDraggedSectionIndex(null);
+  };
+
+  // Update section via API
+  const handleUpdateSection = async (sectionId, updates) => {
+    if (!currentRolloutId) return;
+    try {
+      const data = await rolloutApi.updateSection(currentRolloutId, sectionId, updates);
+      setRollouts(rollouts.map(r =>
+        (r._id || r.id) === currentRolloutId
+          ? { ...data.rollout, id: data.rollout._id }
+          : r
+      ));
+    } catch (err) {
+      console.error('Failed to update section:', err);
+    }
+  };
+
+  // Delete section via API
+  const handleDeleteSection = async (sectionId) => {
+    if (!currentRolloutId) return;
+    try {
+      const data = await rolloutApi.deleteSection(currentRolloutId, sectionId);
+      setRollouts(rollouts.map(r =>
+        (r._id || r.id) === currentRolloutId
+          ? { ...data.rollout, id: data.rollout._id }
+          : r
+      ));
+    } catch (err) {
+      console.error('Failed to delete section:', err);
+    }
+  };
+
+  // Add collection to section via API
+  const handleAddCollectionToSection = async (sectionId, collectionId) => {
+    if (!currentRolloutId) return;
+    try {
+      const data = await rolloutApi.addCollectionToSection(currentRolloutId, sectionId, collectionId);
+      setRollouts(rollouts.map(r =>
+        (r._id || r.id) === currentRolloutId
+          ? { ...data.rollout, id: data.rollout._id }
+          : r
+      ));
+    } catch (err) {
+      console.error('Failed to add collection to section:', err);
+    }
+  };
+
+  // Remove collection from section via API
+  const handleRemoveCollectionFromSection = async (sectionId, collectionId) => {
+    if (!currentRolloutId) return;
+    try {
+      const data = await rolloutApi.removeCollectionFromSection(currentRolloutId, sectionId, collectionId);
+      setRollouts(rollouts.map(r =>
+        (r._id || r.id) === currentRolloutId
+          ? { ...data.rollout, id: data.rollout._id }
+          : r
+      ));
+    } catch (err) {
+      console.error('Failed to remove collection from section:', err);
+    }
   };
 
   const getCollectionById = (id) => allCollections.find((c) => c.id === id);
@@ -358,6 +553,9 @@ function RolloutPlanner() {
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
                 isDragging={draggedSectionIndex === index}
+                onUpdateSection={handleUpdateSection}
+                onDeleteSection={handleDeleteSection}
+                onRemoveCollection={handleRemoveCollectionFromSection}
               />
             ))}
 
@@ -379,7 +577,7 @@ function RolloutPlanner() {
           collections={allCollections}
           selectedIds={currentSectionCollectionIds}
           onSelect={(collectionId) => {
-            addCollectionToSection(currentRolloutId, pickerSectionId, collectionId);
+            handleAddCollectionToSection(pickerSectionId, collectionId);
           }}
           onClose={() => setPickerSectionId(null)}
         />
@@ -398,22 +596,22 @@ function RolloutSection({
   onDragOver,
   onDragEnd,
   isDragging,
+  onUpdateSection,
+  onDeleteSection,
+  onRemoveCollection,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(section.name);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const updateRolloutSection = useAppStore((state) => state.updateRolloutSection);
-  const deleteRolloutSection = useAppStore((state) => state.deleteRolloutSection);
-  const removeCollectionFromSection = useAppStore((state) => state.removeCollectionFromSection);
 
   const handleSaveName = () => {
     if (!editedName.trim()) return;
-    updateRolloutSection(rolloutId, section.id, { name: editedName.trim() });
+    onUpdateSection(section.id, { name: editedName.trim() });
     setIsEditing(false);
   };
 
   const handleColorSelect = (color) => {
-    updateRolloutSection(rolloutId, section.id, { color });
+    onUpdateSection(section.id, { color });
     setShowColorPicker(false);
   };
 
@@ -520,7 +718,7 @@ function RolloutSection({
           )}
           <button
             type="button"
-            onClick={() => deleteRolloutSection(rolloutId, section.id)}
+            onClick={() => onDeleteSection(section.id)}
             className="p-1.5 text-dark-400 hover:text-red-400 hover:bg-dark-700 rounded transition-colors"
           >
             <Trash2 className="w-4 h-4" />
@@ -538,7 +736,7 @@ function RolloutSection({
               <CollectionCard
                 key={collection.id}
                 collection={collection}
-                onRemove={() => removeCollectionFromSection(rolloutId, section.id, collection.id)}
+                onRemove={() => onRemoveCollection(section.id, collection.id)}
               />
             ))}
           </div>
@@ -567,8 +765,12 @@ function CollectionCard({ collection, onRemove }) {
         return <Youtube className="w-4 h-4" />;
       case 'instagram':
         return <Instagram className="w-4 h-4" />;
+      case 'instagram-reels':
+        return <Film className="w-4 h-4" />;
       case 'tiktok':
         return <TikTokIcon className="w-4 h-4" />;
+      case 'tiktok-reels':
+        return <Film className="w-4 h-4" />;
       default:
         return <Folder className="w-4 h-4" />;
     }
@@ -581,10 +783,32 @@ function CollectionCard({ collection, onRemove }) {
         return '#ef4444';
       case 'instagram':
         return '#e1306c';
+      case 'instagram-reels':
+        return '#c13584'; // Instagram gradient purple
       case 'tiktok':
         return '#00f2ea';
+      case 'tiktok-reels':
+        return '#ff0050'; // TikTok red
       default:
         return '#8b5cf6';
+    }
+  };
+
+  // Get platform badge text
+  const getPlatformBadge = (platform) => {
+    switch (platform) {
+      case 'youtube':
+        return 'YT';
+      case 'instagram':
+        return 'IG';
+      case 'instagram-reels':
+        return 'IG Reels';
+      case 'tiktok':
+        return 'TT';
+      case 'tiktok-reels':
+        return 'TT Reels';
+      default:
+        return '';
     }
   };
 
@@ -609,7 +833,7 @@ function CollectionCard({ collection, onRemove }) {
               className="text-[10px] px-1 py-0.5 rounded capitalize flex-shrink-0"
               style={{ backgroundColor: `${platformColor}20`, color: platformColor }}
             >
-              {collection.platform === 'youtube' ? 'YT' : collection.platform === 'instagram' ? 'IG' : 'TT'}
+              {getPlatformBadge(collection.platform)}
             </span>
           )}
         </div>
@@ -640,7 +864,7 @@ function CollectionCard({ collection, onRemove }) {
 function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
-  const [selectedPlatform, setSelectedPlatform] = useState(null); // null = all, 'youtube', 'instagram', 'tiktok'
+  const [selectedPlatform, setSelectedPlatform] = useState(null); // null = all, 'youtube', 'instagram', 'tiktok', 'instagram-reels', 'tiktok-reels'
   const addYoutubeCollection = useAppStore((state) => state.addYoutubeCollection);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -653,6 +877,8 @@ function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
     youtube: collections.filter(c => c.platform === 'youtube').length,
     instagram: collections.filter(c => c.platform === 'instagram').length,
     tiktok: collections.filter(c => c.platform === 'tiktok').length,
+    'instagram-reels': collections.filter(c => c.platform === 'instagram-reels').length,
+    'tiktok-reels': collections.filter(c => c.platform === 'tiktok-reels').length,
   };
 
   const filteredCollections = collections.filter((c) => {
@@ -670,8 +896,12 @@ function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
         return <Youtube className="w-4 h-4" />;
       case 'instagram':
         return <Instagram className="w-4 h-4" />;
+      case 'instagram-reels':
+        return <Film className="w-4 h-4" />;
       case 'tiktok':
         return <TikTokIcon className="w-4 h-4" />;
+      case 'tiktok-reels':
+        return <Film className="w-4 h-4" />;
       default:
         return <Folder className="w-4 h-4" />;
     }
@@ -684,10 +914,32 @@ function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
         return '#ef4444'; // red
       case 'instagram':
         return '#e1306c'; // pink/magenta
+      case 'instagram-reels':
+        return '#c13584'; // Instagram purple
       case 'tiktok':
         return '#00f2ea'; // tiktok cyan
+      case 'tiktok-reels':
+        return '#ff0050'; // TikTok red
       default:
         return '#8b5cf6'; // purple
+    }
+  };
+
+  // Helper to get platform badge text
+  const getPlatformBadge = (platform) => {
+    switch (platform) {
+      case 'youtube':
+        return 'YT';
+      case 'instagram':
+        return 'IG';
+      case 'instagram-reels':
+        return 'IG Reels';
+      case 'tiktok':
+        return 'TT';
+      case 'tiktok-reels':
+        return 'TT Reels';
+      default:
+        return '';
     }
   };
 
@@ -784,6 +1036,34 @@ function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
               <span>{platformCounts.tiktok}</span>
             </button>
           )}
+          {platformCounts['instagram-reels'] > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPlatform('instagram-reels')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                selectedPlatform === 'instagram-reels'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+              }`}
+            >
+              <Film className="w-4 h-4" />
+              <span>IG Reels ({platformCounts['instagram-reels']})</span>
+            </button>
+          )}
+          {platformCounts['tiktok-reels'] > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedPlatform('tiktok-reels')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                selectedPlatform === 'tiktok-reels'
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+              }`}
+            >
+              <Film className="w-4 h-4" />
+              <span>TT Reels ({platformCounts['tiktok-reels']})</span>
+            </button>
+          )}
         </div>
 
         {/* Tags Filter */}
@@ -842,10 +1122,10 @@ function CollectionPicker({ collections, selectedIds, onSelect, onClose }) {
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-white">{collection.name}</span>
                       <span
-                        className="text-xs px-1.5 py-0.5 rounded capitalize"
+                        className="text-xs px-1.5 py-0.5 rounded"
                         style={{ backgroundColor: `${platformColor}20`, color: platformColor }}
                       >
-                        {collection.platform || 'youtube'}
+                        {getPlatformBadge(collection.platform)}
                       </span>
                     </div>
                     {collection.tags && collection.tags.length > 0 && (

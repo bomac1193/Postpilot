@@ -5,7 +5,7 @@ This lightweight setup focuses on two things:
 1. **Draft-only Instagram grid planner** – upload images (or pick a color swatch), add captions, and reorder a 3×N grid with drag-and-drop. Everything lives in browser state/localStorage.
 2. **AI caption + content-idea assistant** – backed by the OpenAI API with two focused endpoints.
 
-The React client (in `client/`) now ships inside the main Express server. When you run the normal PostPilot backend on port 3000 you can visit **`http://localhost:3000/alchemy`** to use the minimalist planner UI.
+The React client (in `client/`) now ships inside the main Express server. When you run the normal Postpanda backend on port 3000 you can visit **`http://localhost:3000/alchemy`** to use the minimalist planner UI.
 
 ## 1. Prerequisites
 
@@ -14,7 +14,7 @@ The React client (in `client/`) now ships inside the main Express server. When y
 
 ## 2. Environment Variables
 
-### Server (existing PostPilot `.env`)
+### Server (existing Postpanda `.env`)
 
 Add/update the OpenAI key that both the legacy AI features and the new planner use:
 
@@ -46,7 +46,7 @@ cd client && npm install
 npm run mini:dev
 ```
 
-This runs the primary PostPilot backend (port 3000) **and** the Vite dev server (port 5173) together.
+This runs the primary Postpanda backend (port 3000) **and** the Vite dev server (port 5173) together.
 
 ### Option B – separate terminals
 

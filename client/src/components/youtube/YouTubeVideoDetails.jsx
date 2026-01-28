@@ -131,7 +131,19 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
         videoType: aiVideoType,
         count: 5,
       });
-      setAiVariants(result.variants || []);
+      const variants = result.variants || [];
+      setAiVariants(variants);
+
+      // Auto-apply the first (best) variant
+      if (variants.length > 0) {
+        const best = variants[0];
+        setTitle(best.title);
+        setDescription(best.description);
+        updateYoutubeVideo(videoId, {
+          title: best.title,
+          description: best.description,
+        });
+      }
     } catch (error) {
       console.error('AI generation error:', error);
     } finally {
@@ -345,7 +357,7 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
               {/* AI Results */}
               {aiVariants.length > 0 && (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  <p className="text-xs text-dark-400">Click to apply:</p>
+                  <p className="text-xs text-green-400">Top result applied. Click another to switch:</p>
                   {aiVariants.map((variant, i) => (
                     <div
                       key={i}

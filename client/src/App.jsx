@@ -13,6 +13,9 @@ import MediaLibrary from './pages/MediaLibrary';
 import Connections from './pages/Connections';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
+import Characters from './pages/Characters';
+import ContentStudio from './pages/ContentStudio';
+import TasteGenome from './pages/TasteGenome';
 
 function App() {
   const theme = useAppStore((state) => state.theme);
@@ -61,6 +64,9 @@ function App() {
           <Route path="library" element={<MediaLibrary />} />
           <Route path="connections" element={<Connections />} />
           <Route path="profiles" element={<Profiles />} />
+          <Route path="characters" element={<Characters />} />
+          <Route path="studio" element={<ContentStudio />} />
+          <Route path="genome" element={<TasteGenome />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

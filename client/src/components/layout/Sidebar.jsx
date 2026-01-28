@@ -14,6 +14,9 @@ import {
   Youtube,
   Layers,
   Users,
+  Sparkles,
+  Dna,
+  UserCircle2,
 } from 'lucide-react';
 
 // Custom magic wand logo icon for creator-magician brand
@@ -59,6 +62,9 @@ const navItems = [
   { path: '/rollout', icon: Layers, label: 'Rollout' },
   { path: '/editor', icon: Image, label: 'Quick Editor' },
   { path: '/editor/pro', icon: Wand2, label: 'Pro Editor' },
+  { path: '/studio', icon: Sparkles, label: 'Content Studio' },
+  { path: '/characters', icon: UserCircle2, label: 'Characters' },
+  { path: '/genome', icon: Dna, label: 'Taste Genome' },
   { path: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { path: '/library', icon: FolderOpen, label: 'Media Library' },
   { path: '/profiles', icon: Users, label: 'Profiles' },

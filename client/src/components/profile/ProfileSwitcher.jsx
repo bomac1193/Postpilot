@@ -39,11 +39,16 @@ function ProfileSwitcher({ collapsed = false }) {
   // Load profiles on mount
   useEffect(() => {
     const loadProfiles = async () => {
-      if (!isAuthenticated) return;
+      if (!isAuthenticated) {
+        console.log('[ProfileSwitcher] Not authenticated, skipping profile load');
+        return;
+      }
 
       try {
         setLoading(true);
+        console.log('[ProfileSwitcher] Loading profiles...');
         const profileList = await profileApi.getAll();
+        console.log('[ProfileSwitcher] Loaded profiles:', profileList.length, profileList);
         setProfiles(profileList);
 
         // If no profiles, get/create the current one (which creates default)

@@ -209,12 +209,15 @@ function GridPlanner() {
 
   // Fetch all grids from backend
   const fetchGrids = useCallback(async () => {
+    console.log('[GridPlanner] fetchGrids called, currentProfileId:', currentProfileId);
     setLoading(true);
     setError(null);
     try {
       // Pass currentProfileId to filter grids by profile
       const data = await gridApi.getAll(currentProfileId);
+      console.log('[GridPlanner] API response:', data);
       const gridList = Array.isArray(data) ? data : data.grids || [];
+      console.log('[GridPlanner] Parsed gridList:', gridList.length, 'grids');
 
       // If we have grids, select the first one (or active one)
       if (gridList.length > 0) {
@@ -374,14 +377,16 @@ function GridPlanner() {
   }, [gridMeta, rollouts]);
 
   useEffect(() => {
+    console.log('[GridPlanner] Initial mount, isAuthenticated:', isAuthenticated);
     fetchGrids();
   }, [fetchGrids]);
 
   // Refetch grids when profile changes
   useEffect(() => {
     // Always refetch when profile changes (including when it becomes set for the first time)
+    console.log('[GridPlanner] Profile changed to:', currentProfileId);
     fetchGrids();
-  }, [currentProfileId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentProfileId]); // eslint-disable-line react-hooks-exhaustive-deps
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

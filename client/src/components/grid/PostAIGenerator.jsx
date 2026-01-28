@@ -11,6 +11,9 @@ import {
   RefreshCw,
   Instagram,
   Youtube,
+  Star,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 
 // TikTok icon
@@ -28,6 +31,32 @@ const PLATFORMS = [
   { id: 'youtube', label: 'YouTube', icon: Youtube },
 ];
 
+// Simple star rating component
+function StarRating({ rating, onRate }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          onClick={() => onRate(star)}
+          onMouseEnter={() => setHover(star)}
+          onMouseLeave={() => setHover(0)}
+          className="p-0.5 transition-transform hover:scale-110"
+        >
+          <Star
+            className={`w-4 h-4 transition-colors ${
+              star <= (hover || rating)
+                ? 'fill-yellow-400 text-yellow-400'
+                : 'text-dark-500'
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function PostAIGenerator({ post, onClose, onApplyCaption }) {
   const [characters, setCharacters] = useState([]);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
@@ -39,6 +68,8 @@ function PostAIGenerator({ post, onClose, onApplyCaption }) {
   const [usePersonalGenome, setUsePersonalGenome] = useState(true);
   const [showCharacterDropdown, setShowCharacterDropdown] = useState(false);
   const [tasteProfile, setTasteProfile] = useState(null);
+  const [ratings, setRatings] = useState({});
+  const [savedRatings, setSavedRatings] = useState({});
 
   useEffect(() => {
     loadCharacters();
@@ -111,6 +142,33 @@ function PostAIGenerator({ post, onClose, onApplyCaption }) {
       onApplyCaption(variant.variant);
     }
     onClose();
+  };
+
+  const handleRate = async (variant, rating, index) => {
+    setRatings(prev => ({ ...prev, [index]: rating }));
+    try {
+      await intelligenceApi.rate(
+        {
+          variant: variant.variant,
+          hookType: variant.hookType,
+          tone: variant.tone,
+          performanceScore: variant.performanceScore,
+          tasteScore: variant.tasteScore,
+        },
+        rating,
+        {},
+        {
+          topic,
+          platform,
+          characterId: selectedCharacter?._id,
+          source: 'local',
+        },
+        false
+      );
+      setSavedRatings(prev => ({ ...prev, [index]: true }));
+    } catch (error) {
+      console.error('Failed to save rating:', error);
+    }
   };
 
   return (
@@ -366,6 +424,19 @@ function PostAIGenerator({ post, onClose, onApplyCaption }) {
                         Apply
                       </button>
                     </div>
+                  </div>
+                  {/* Rating Section */}
+                  <div className="mt-3 pt-3 border-t border-dark-600 flex items-center gap-3">
+                    <span className="text-xs text-dark-400">Rate this:</span>
+                    <StarRating
+                      rating={ratings[i] || 0}
+                      onRate={(rating) => handleRate(variant, rating, i)}
+                    />
+                    {savedRatings[i] && (
+                      <span className="text-xs text-green-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Saved
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

@@ -713,6 +713,36 @@ export const intelligenceApi = {
   async batchScore(contentIds, profileId = null) {
     const { data } = await api.post('/api/intelligence/batch-score', { contentIds, profileId });
     return data;
+  },
+
+  // Rate a generated content variant (Refyn-style taste learning)
+  async rate(content, rating, feedback = {}, context = {}, wasApplied = false, profileId = null) {
+    const { data } = await api.post('/api/intelligence/rate', {
+      content,
+      rating,
+      feedback,
+      context,
+      wasApplied,
+      profileId
+    });
+    return data;
+  },
+
+  // Get rating history and stats
+  async getRatings(options = {}) {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit);
+    if (options.offset) params.append('offset', options.offset);
+    if (options.platform) params.append('platform', options.platform);
+    if (options.minRating) params.append('minRating', options.minRating);
+    const { data } = await api.get(`/api/intelligence/ratings?${params.toString()}`);
+    return data;
+  },
+
+  // Generate YouTube content (titles, descriptions, tags)
+  async generateYouTube(topic, options = {}) {
+    const { data } = await api.post('/api/intelligence/generate-youtube', { topic, ...options });
+    return data;
   }
 };
 

@@ -525,12 +525,280 @@ async function getTrendingInNiche(niche, platform) {
   };
 }
 
+/**
+ * Update taste profile based on user rating of generated content
+ * This is the Refyn-style learning system
+ */
+function updateTasteFromRating(currentProfile, content, rating, feedback = {}) {
+  // Clone current profile
+  const updatedProfile = JSON.parse(JSON.stringify(currentProfile || {
+    performancePatterns: { hooks: [], sentiment: [], structure: [], keywords: [] },
+    aestheticPatterns: { dominantTones: [], avoidTones: [], voice: 'conversational' },
+    voiceSignature: { sentencePatterns: [], rhetoricalDevices: [] },
+    ratingLearning: { likedHooks: {}, likedTones: {}, dislikedHooks: {}, dislikedTones: {} },
+    confidence: 0,
+    itemCount: 0,
+    ratingCount: 0,
+  }));
+
+  // Initialize rating learning if not present
+  if (!updatedProfile.ratingLearning) {
+    updatedProfile.ratingLearning = {
+      likedHooks: {},
+      likedTones: {},
+      dislikedHooks: {},
+      dislikedTones: {},
+    };
+  }
+
+  const hookType = content.hookType;
+  const tone = content.tone;
+
+  // High rating (4-5 stars) = reinforce patterns
+  if (rating >= 4) {
+    // Track liked hooks
+    if (hookType) {
+      updatedProfile.ratingLearning.likedHooks[hookType] =
+        (updatedProfile.ratingLearning.likedHooks[hookType] || 0) + rating;
+
+      // Add to preferred hooks if strongly liked
+      if (!updatedProfile.performancePatterns.hooks.includes(hookType)) {
+        updatedProfile.performancePatterns.hooks.push(hookType);
+      }
+    }
+
+    // Track liked tones
+    if (tone) {
+      updatedProfile.ratingLearning.likedTones[tone] =
+        (updatedProfile.ratingLearning.likedTones[tone] || 0) + rating;
+
+      // Add to dominant tones if strongly liked
+      if (!updatedProfile.aestheticPatterns.dominantTones.includes(tone)) {
+        updatedProfile.aestheticPatterns.dominantTones.push(tone);
+      }
+
+      // Remove from avoid list if present
+      const avoidIndex = updatedProfile.aestheticPatterns.avoidTones.indexOf(tone);
+      if (avoidIndex > -1) {
+        updatedProfile.aestheticPatterns.avoidTones.splice(avoidIndex, 1);
+      }
+    }
+  }
+
+  // Low rating (1-2 stars) = learn to avoid
+  if (rating <= 2) {
+    // Track disliked hooks
+    if (hookType) {
+      updatedProfile.ratingLearning.dislikedHooks[hookType] =
+        (updatedProfile.ratingLearning.dislikedHooks[hookType] || 0) + (3 - rating);
+
+      // Remove from preferred if consistently disliked
+      const dislikeCount = updatedProfile.ratingLearning.dislikedHooks[hookType];
+      if (dislikeCount >= 3) {
+        const idx = updatedProfile.performancePatterns.hooks.indexOf(hookType);
+        if (idx > -1) {
+          updatedProfile.performancePatterns.hooks.splice(idx, 1);
+        }
+      }
+    }
+
+    // Track disliked tones
+    if (tone) {
+      updatedProfile.ratingLearning.dislikedTones[tone] =
+        (updatedProfile.ratingLearning.dislikedTones[tone] || 0) + (3 - rating);
+
+      // Add to avoid list if not in dominant tones
+      if (!updatedProfile.aestheticPatterns.dominantTones.includes(tone) &&
+          !updatedProfile.aestheticPatterns.avoidTones.includes(tone)) {
+        updatedProfile.aestheticPatterns.avoidTones.push(tone);
+      }
+    }
+  }
+
+  // Process explicit feedback
+  if (feedback.liked) {
+    feedback.liked.forEach(item => {
+      if (item === 'hook' && hookType) {
+        updatedProfile.ratingLearning.likedHooks[hookType] =
+          (updatedProfile.ratingLearning.likedHooks[hookType] || 0) + 2;
+      }
+      if (item === 'tone' && tone) {
+        updatedProfile.ratingLearning.likedTones[tone] =
+          (updatedProfile.ratingLearning.likedTones[tone] || 0) + 2;
+      }
+    });
+  }
+
+  if (feedback.disliked) {
+    feedback.disliked.forEach(item => {
+      if (item === 'hook' && hookType) {
+        updatedProfile.ratingLearning.dislikedHooks[hookType] =
+          (updatedProfile.ratingLearning.dislikedHooks[hookType] || 0) + 2;
+      }
+      if (item === 'tone' && tone) {
+        updatedProfile.ratingLearning.dislikedTones[tone] =
+          (updatedProfile.ratingLearning.dislikedTones[tone] || 0) + 2;
+      }
+    });
+  }
+
+  // Update confidence based on ratings
+  updatedProfile.ratingCount = (updatedProfile.ratingCount || 0) + 1;
+  updatedProfile.confidence = Math.min(0.95, Math.log10(updatedProfile.ratingCount + 1) / 2);
+  updatedProfile.lastRatedAt = new Date();
+
+  return updatedProfile;
+}
+
+/**
+ * Generate YouTube-specific content (titles, descriptions, tags)
+ */
+async function generateYouTubeContent(topic, tasteProfile, options = {}) {
+  const { videoType = 'standard', count = 5, language = 'en' } = options;
+
+  if (!anthropic) {
+    return {
+      variants: generateFallbackYouTubeContent(topic, count),
+      message: 'Using template-based generation (API not configured)'
+    };
+  }
+
+  // Build taste context from profile
+  const tasteContext = buildTasteContext(tasteProfile);
+
+  // Video type specific guidance
+  const typeGuidance = {
+    'short': 'YouTube Shorts (vertical, under 60 seconds, punchy hooks)',
+    'standard': 'Standard YouTube video (8-15 minutes, value-packed)',
+    'long': 'Long-form content (20+ minutes, deep dive)',
+    'tutorial': 'Tutorial/How-to video (step-by-step, educational)',
+    'vlog': 'Vlog style (personal, day-in-life, authentic)',
+  };
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2048,
+      messages: [{
+        role: 'user',
+        content: `You are a YouTube content strategist helping a creator optimize their video metadata.
+
+CREATOR'S TASTE PROFILE:
+${tasteContext}
+
+TASK: Generate ${count} complete YouTube video packages for this topic: "${topic}"
+
+VIDEO TYPE: ${typeGuidance[videoType] || typeGuidance['standard']}
+LANGUAGE: ${language}
+
+RULES:
+1. Titles should be 50-70 characters, click-worthy but not clickbait
+2. Descriptions should be 2-3 sentences for the preview, SEO-optimized
+3. Include relevant tags (8-12 tags)
+4. Match the creator's voice and style
+5. Consider searchability and trending patterns
+
+Return ONLY valid JSON array:
+[
+  {
+    "title": "The video title",
+    "description": "2-3 sentence description that appears in search results and below the video",
+    "tags": ["tag1", "tag2", "tag3"],
+    "hookType": "question|bold-claim|how-to|story|statistic|controversy|curiosity-gap",
+    "tone": "the primary tone",
+    "thumbnailIdea": "Brief description of an effective thumbnail concept",
+    "performanceScore": 0-100,
+    "tasteScore": 0-100,
+    "reasoning": "Why this would perform well"
+  }
+]`
+      }]
+    });
+
+    const jsonMatch = response.content[0].text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      return {
+        variants: JSON.parse(jsonMatch[0]),
+        message: 'Generated using AI in your voice'
+      };
+    }
+
+    return {
+      variants: generateFallbackYouTubeContent(topic, count),
+      message: 'Using template-based generation'
+    };
+  } catch (error) {
+    console.error('[Intelligence] YouTube generation error:', error.message);
+    return {
+      variants: generateFallbackYouTubeContent(topic, count),
+      message: 'Using template-based generation (API error)'
+    };
+  }
+}
+
+/**
+ * Fallback YouTube content generation without API
+ */
+function generateFallbackYouTubeContent(topic, count) {
+  const templates = [
+    {
+      prefix: "I Tried ",
+      suffix: " For 30 Days - Here's What Happened",
+      hookType: "story",
+      thumbnailIdea: "Before/after split with shocked expression"
+    },
+    {
+      prefix: "The Truth About ",
+      suffix: " (Nobody Talks About This)",
+      hookType: "curiosity-gap",
+      thumbnailIdea: "Serious face with redacted text overlay"
+    },
+    {
+      prefix: "How To ",
+      suffix: " (Complete Guide)",
+      hookType: "how-to",
+      thumbnailIdea: "Step-by-step visual with checkmarks"
+    },
+    {
+      prefix: "Why ",
+      suffix: " Is Changing Everything in 2024",
+      hookType: "bold-claim",
+      thumbnailIdea: "Mind-blown expression with topic graphic"
+    },
+    {
+      prefix: "5 ",
+      suffix: " Mistakes You're Making Right Now",
+      hookType: "controversy",
+      thumbnailIdea: "X marks with numbered list preview"
+    },
+  ];
+
+  const variants = [];
+  for (let i = 0; i < Math.min(count, templates.length); i++) {
+    const t = templates[i];
+    variants.push({
+      title: `${t.prefix}${topic}${t.suffix}`,
+      description: `In this video, I share everything about ${topic}. Whether you're a beginner or advanced, you'll learn valuable insights that can help you succeed.`,
+      tags: [topic.toLowerCase(), 'tips', 'guide', 'how to', '2024', 'tutorial', 'advice', 'learn'],
+      hookType: t.hookType,
+      tone: 'confident',
+      thumbnailIdea: t.thumbnailIdea,
+      performanceScore: 60 + Math.floor(Math.random() * 20),
+      tasteScore: 50 + Math.floor(Math.random() * 20),
+      reasoning: 'Template-based generation'
+    });
+  }
+  return variants;
+}
+
 module.exports = {
   analyzeContent,
   scoreAgainstProfile,
   generateVariants,
   analyzePerformance,
   updateTasteProfile,
+  updateTasteFromRating,
+  generateYouTubeContent,
   getTrendingInNiche,
   DEFAULT_PERFORMANCE_DNA,
   DEFAULT_AESTHETIC_DNA

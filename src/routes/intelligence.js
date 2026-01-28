@@ -9,6 +9,7 @@ const { authenticate: auth } = require('../middleware/auth');
 const User = require('../models/User');
 const Profile = require('../models/Profile');
 const Content = require('../models/Content');
+const ContentRating = require('../models/ContentRating');
 const intelligenceService = require('../services/intelligenceService');
 
 /**
@@ -364,6 +365,188 @@ router.post('/batch-score', auth, async (req, res) => {
   } catch (error) {
     console.error('[Intelligence] Batch score error:', error);
     res.status(500).json({ error: 'Batch scoring failed' });
+  }
+});
+
+/**
+ * POST /api/intelligence/rate
+ * Rate a generated content variant - feeds into taste learning
+ */
+router.post('/rate', auth, async (req, res) => {
+  try {
+    const { content, rating, feedback, context, wasApplied, profileId } = req.body;
+
+    if (!content || !rating) {
+      return res.status(400).json({ error: 'Content and rating required' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+    }
+
+    // Save the rating
+    const contentRating = new ContentRating({
+      userId: req.userId,
+      profileId,
+      content,
+      rating,
+      feedback: feedback || {},
+      context: context || {},
+      wasApplied: wasApplied || false,
+    });
+    await contentRating.save();
+
+    // Update taste profile based on rating
+    let targetModel = null;
+    let targetId = null;
+    let currentProfile = null;
+
+    if (profileId) {
+      const profile = await Profile.findOne({ _id: profileId, userId: req.userId });
+      if (profile) {
+        currentProfile = profile.tasteProfile || {};
+        targetModel = Profile;
+        targetId = profileId;
+      }
+    }
+
+    if (!targetModel) {
+      const user = await User.findById(req.userId);
+      currentProfile = user.tasteProfile || {};
+      targetModel = User;
+      targetId = req.userId;
+    }
+
+    // Update taste profile from rating
+    const updatedProfile = intelligenceService.updateTasteFromRating(
+      currentProfile,
+      content,
+      rating,
+      feedback
+    );
+
+    await targetModel.findByIdAndUpdate(targetId, {
+      tasteProfile: updatedProfile
+    });
+
+    res.json({
+      success: true,
+      message: 'Rating saved and taste profile updated',
+      ratingId: contentRating._id,
+    });
+  } catch (error) {
+    console.error('[Intelligence] Rating error:', error);
+    res.status(500).json({ error: 'Failed to save rating' });
+  }
+});
+
+/**
+ * GET /api/intelligence/ratings
+ * Get user's rating history
+ */
+router.get('/ratings', auth, async (req, res) => {
+  try {
+    const { limit = 50, offset = 0, platform, minRating } = req.query;
+
+    const query = { userId: req.userId };
+    if (platform) query['context.platform'] = platform;
+    if (minRating) query.rating = { $gte: parseInt(minRating) };
+
+    const ratings = await ContentRating.find(query)
+      .sort({ createdAt: -1 })
+      .skip(parseInt(offset))
+      .limit(parseInt(limit));
+
+    const total = await ContentRating.countDocuments(query);
+
+    // Calculate stats
+    const stats = await ContentRating.aggregate([
+      { $match: { userId: req.userId } },
+      {
+        $group: {
+          _id: null,
+          totalRatings: { $sum: 1 },
+          avgRating: { $avg: '$rating' },
+          fiveStars: { $sum: { $cond: [{ $eq: ['$rating', 5] }, 1, 0] } },
+          fourStars: { $sum: { $cond: [{ $eq: ['$rating', 4] }, 1, 0] } },
+          threeStars: { $sum: { $cond: [{ $eq: ['$rating', 3] }, 1, 0] } },
+          twoStars: { $sum: { $cond: [{ $eq: ['$rating', 2] }, 1, 0] } },
+          oneStars: { $sum: { $cond: [{ $eq: ['$rating', 1] }, 1, 0] } },
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      ratings,
+      total,
+      stats: stats[0] || { totalRatings: 0, avgRating: 0 },
+    });
+  } catch (error) {
+    console.error('[Intelligence] Get ratings error:', error);
+    res.status(500).json({ error: 'Failed to get ratings' });
+  }
+});
+
+/**
+ * POST /api/intelligence/generate-youtube
+ * Generate YouTube-specific content (titles, descriptions, tags)
+ */
+router.post('/generate-youtube', auth, async (req, res) => {
+  try {
+    const { topic, videoType, count, language, profileId, characterId } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({ error: 'Topic required' });
+    }
+
+    // Get taste profile
+    let tasteProfile = null;
+
+    if (profileId) {
+      const profile = await Profile.findOne({ _id: profileId, userId: req.userId });
+      tasteProfile = profile?.tasteProfile;
+    }
+
+    if (!tasteProfile) {
+      const user = await User.findById(req.userId);
+      tasteProfile = user?.tasteProfile;
+    }
+
+    // Add character context if provided
+    if (characterId) {
+      const Character = require('../models/Character');
+      const character = await Character.findOne({ _id: characterId, userId: req.userId });
+      if (character) {
+        tasteProfile = {
+          ...tasteProfile,
+          characterContext: `
+Name: ${character.name}
+Voice: ${character.voice}
+Tone: ${character.tone}
+Caption Style: ${character.captionStyle}
+Persona: ${character.personaTags?.join(', ') || 'authentic'}
+${character.samplePosts?.length > 0 ? `Sample style: "${character.samplePosts[0]}"` : ''}
+          `.trim()
+        };
+      }
+    }
+
+    const result = await intelligenceService.generateYouTubeContent(topic, tasteProfile, {
+      videoType: videoType || 'standard',
+      count: count || 5,
+      language: language || 'en',
+    });
+
+    res.json({
+      success: true,
+      topic,
+      videoType,
+      ...result,
+    });
+  } catch (error) {
+    console.error('[Intelligence] YouTube generate error:', error);
+    res.status(500).json({ error: 'YouTube generation failed' });
   }
 });
 

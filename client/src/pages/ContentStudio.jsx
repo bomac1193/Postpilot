@@ -15,6 +15,10 @@ import {
   LogOut,
   ExternalLink,
   Dna,
+  Star,
+  ThumbsUp,
+  ThumbsDown,
+  Youtube,
 } from 'lucide-react';
 
 function ScoreRing({ score, size = 60, strokeWidth = 4 }) {
@@ -60,18 +64,102 @@ function ScoreRing({ score, size = 60, strokeWidth = 4 }) {
   );
 }
 
-function VariantCard({ variant, index, onCopy, copied }) {
+function StarRating({ rating, onRate, size = 'md' }) {
+  const [hover, setHover] = useState(0);
+  const sizes = { sm: 'w-4 h-4', md: 'w-5 h-5', lg: 'w-6 h-6' };
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          onClick={() => onRate(star)}
+          onMouseEnter={() => setHover(star)}
+          onMouseLeave={() => setHover(0)}
+          className="p-0.5 transition-transform hover:scale-110"
+        >
+          <Star
+            className={`${sizes[size]} transition-colors ${
+              star <= (hover || rating)
+                ? 'fill-yellow-400 text-yellow-400'
+                : 'text-dark-500'
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function VariantCard({ variant, index, onCopy, copied, onRate, platform }) {
+  const [rating, setRating] = useState(0);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedback, setFeedback] = useState({ liked: [], disliked: [] });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const feedbackOptions = [
+    { id: 'hook', label: 'Hook' },
+    { id: 'tone', label: 'Tone' },
+    { id: 'length', label: 'Length' },
+    { id: 'style', label: 'Style' },
+  ];
+
+  const handleRate = async (stars) => {
+    setRating(stars);
+    setShowFeedback(true);
+  };
+
+  const toggleFeedback = (type, id) => {
+    setFeedback(prev => {
+      const current = prev[type];
+      const updated = current.includes(id)
+        ? current.filter(x => x !== id)
+        : [...current, id];
+      return { ...prev, [type]: updated };
+    });
+  };
+
+  const submitRating = async () => {
+    if (!rating) return;
+    setSaving(true);
+    try {
+      await onRate(variant, rating, feedback, platform);
+      setSaved(true);
+      setShowFeedback(false);
+    } catch (error) {
+      console.error('Failed to save rating:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="bg-dark-700 rounded-xl p-4 hover:bg-dark-600/50 transition-colors">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-white flex-1 leading-relaxed">{variant.variant}</p>
+        <p className="text-white flex-1 leading-relaxed">{variant.variant || variant.title}</p>
         <button
-          onClick={() => onCopy(variant.variant, index)}
+          onClick={() => onCopy(variant.variant || variant.title, index)}
           className="p-2 text-dark-400 hover:text-white rounded-lg flex-shrink-0 transition-colors"
         >
           {copied === index ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
         </button>
       </div>
+
+      {/* YouTube specific fields */}
+      {variant.description && (
+        <p className="mt-2 text-sm text-dark-300">{variant.description}</p>
+      )}
+      {variant.tags && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {variant.tags.slice(0, 6).map((tag, i) => (
+            <span key={i} className="px-2 py-0.5 bg-dark-600 text-dark-400 rounded text-xs">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-3 mt-3">
         <span className="px-2 py-1 bg-accent-purple/20 text-accent-purple rounded text-xs font-medium">
           {variant.hookType}
@@ -90,9 +178,82 @@ function VariantCard({ variant, index, onCopy, copied }) {
           </span>
         </div>
       </div>
+
       {variant.reasoning && (
         <p className="mt-2 text-xs text-dark-400 italic">{variant.reasoning}</p>
       )}
+
+      {/* Rating Section */}
+      <div className="mt-3 pt-3 border-t border-dark-600">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-dark-400">Rate this:</span>
+            <StarRating rating={rating} onRate={handleRate} size="sm" />
+            {saved && (
+              <span className="text-xs text-green-400 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Saved
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Feedback Panel */}
+        {showFeedback && !saved && (
+          <div className="mt-3 p-3 bg-dark-800 rounded-lg">
+            <p className="text-xs text-dark-300 mb-2">What did you think? (optional)</p>
+            <div className="flex gap-4 mb-3">
+              <div className="flex-1">
+                <p className="text-xs text-dark-400 mb-1 flex items-center gap-1">
+                  <ThumbsUp className="w-3 h-3 text-green-400" /> Liked
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {feedbackOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => toggleFeedback('liked', opt.id)}
+                      className={`px-2 py-1 rounded text-xs transition-colors ${
+                        feedback.liked.includes(opt.id)
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                          : 'bg-dark-700 text-dark-400 hover:text-dark-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-dark-400 mb-1 flex items-center gap-1">
+                  <ThumbsDown className="w-3 h-3 text-red-400" /> Disliked
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {feedbackOptions.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => toggleFeedback('disliked', opt.id)}
+                      className={`px-2 py-1 rounded text-xs transition-colors ${
+                        feedback.disliked.includes(opt.id)
+                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          : 'bg-dark-700 text-dark-400 hover:text-dark-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={submitRating}
+              disabled={saving}
+              className="w-full py-2 bg-accent-purple text-white text-sm rounded-lg hover:bg-accent-purple/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
+              Save Rating
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -127,6 +288,11 @@ function ContentStudio() {
   const [folioError, setFolioError] = useState('');
   const [folioTasteProfile, setFolioTasteProfile] = useState(null);
   const [useFolioForGeneration, setUseFolioForGeneration] = useState(false);
+
+  // YouTube generation
+  const [youtubeVideoType, setYoutubeVideoType] = useState('standard');
+  const [youtubeVariants, setYoutubeVariants] = useState([]);
+  const [generatingYoutube, setGeneratingYoutube] = useState(false);
 
   useEffect(() => {
     loadTasteProfile();
@@ -191,6 +357,63 @@ function ContentStudio() {
     setFolioUser(null);
     setFolioTasteProfile(null);
     setUseFolioForGeneration(false);
+  };
+
+  // Handle rating a generated variant
+  const handleRate = async (variant, rating, feedback, currentPlatform) => {
+    try {
+      await intelligenceApi.rate(
+        {
+          variant: variant.variant || variant.title,
+          hookType: variant.hookType,
+          tone: variant.tone,
+          performanceScore: variant.performanceScore,
+          tasteScore: variant.tasteScore,
+        },
+        rating,
+        feedback,
+        {
+          topic,
+          platform: currentPlatform || platform,
+          source: useFolioForGeneration ? 'folio' : 'local',
+        },
+        false // wasApplied
+      );
+    } catch (error) {
+      console.error('Failed to save rating:', error);
+      throw error;
+    }
+  };
+
+  // Generate YouTube content
+  const handleGenerateYouTube = async () => {
+    if (!topic.trim()) return;
+    setGeneratingYoutube(true);
+    try {
+      let result;
+      if (useFolioForGeneration && folioConnected) {
+        // Use Folio for YouTube
+        result = await folioApi.generate.variants(
+          topic,
+          'YOUTUBE_SHORT',
+          5,
+          [],
+          'generate',
+          'English'
+        );
+      } else {
+        // Use local YouTube generation
+        result = await intelligenceApi.generateYouTube(topic, {
+          videoType: youtubeVideoType,
+          count: 5,
+        });
+      }
+      setYoutubeVariants(result.variants || []);
+    } catch (error) {
+      console.error('YouTube generate error:', error);
+    } finally {
+      setGeneratingYoutube(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -272,6 +495,7 @@ function ContentStudio() {
       <div className="flex gap-1 mb-6 bg-dark-800 rounded-lg p-1 w-fit">
         {[
           { id: 'generate', label: 'Generate', icon: Sparkles },
+          { id: 'youtube', label: 'YouTube', icon: Youtube },
           { id: 'score', label: 'Score', icon: BarChart3 },
           { id: 'trending', label: 'Trending', icon: TrendingUp },
           { id: 'folio', label: 'Folio', icon: Link2 },
@@ -356,6 +580,8 @@ function ContentStudio() {
                   index={i}
                   onCopy={copyToClipboard}
                   copied={copied}
+                  onRate={handleRate}
+                  platform={platform}
                 />
               ))}
             </div>
@@ -394,6 +620,144 @@ function ContentStudio() {
                   <span className="text-white">{Math.round((tasteProfile.confidence || 0) * 100)}%</span>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* YouTube Tab */}
+      {activeTab === 'youtube' && (
+        <div className="space-y-6">
+          {/* Folio Mode Indicator */}
+          {useFolioForGeneration && folioConnected && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-accent-purple/10 border border-accent-purple/30 rounded-lg">
+              <Link2 className="w-4 h-4 text-accent-purple" />
+              <span className="text-sm text-accent-purple">Using Folio's AI for YouTube generation</span>
+              <button
+                onClick={() => setUseFolioForGeneration(false)}
+                className="ml-auto text-xs text-dark-400 hover:text-white"
+              >
+                Switch to local
+              </button>
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="bg-dark-800 rounded-xl p-4 border border-dark-700">
+            <label className="block text-sm text-dark-300 mb-2">What's your YouTube video about?</label>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="Enter your video topic or idea..."
+                className="flex-1 px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white text-lg"
+                onKeyDown={(e) => e.key === 'Enter' && handleGenerateYouTube()}
+              />
+              <select
+                value={youtubeVideoType}
+                onChange={(e) => setYoutubeVideoType(e.target.value)}
+                className="px-4 py-3 bg-dark-700 border border-dark-600 rounded-lg text-white"
+              >
+                <option value="short">YouTube Short</option>
+                <option value="standard">Standard (8-15 min)</option>
+                <option value="long">Long-form (20+ min)</option>
+                <option value="tutorial">Tutorial</option>
+                <option value="vlog">Vlog</option>
+              </select>
+              <button
+                onClick={handleGenerateYouTube}
+                disabled={generatingYoutube || !topic.trim()}
+                className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2 font-medium"
+              >
+                {generatingYoutube ? (
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Youtube className="w-5 h-5" />
+                )}
+                Generate
+              </button>
+            </div>
+          </div>
+
+          {/* Results */}
+          {youtubeVariants.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-lg font-medium text-white flex items-center gap-2">
+                <Youtube className="w-5 h-5 text-red-500" />
+                Generated YouTube Content
+              </h3>
+              {youtubeVariants.map((v, i) => (
+                <div key={i} className="bg-dark-700 rounded-xl p-4 hover:bg-dark-600/50 transition-colors">
+                  {/* Title */}
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h4 className="text-white font-medium text-lg">{v.title}</h4>
+                    <button
+                      onClick={() => copyToClipboard(v.title, `yt-title-${i}`)}
+                      className="p-2 text-dark-400 hover:text-white rounded-lg flex-shrink-0 transition-colors"
+                    >
+                      {copied === `yt-title-${i}` ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-dark-300 text-sm mb-3">{v.description}</p>
+
+                  {/* Tags */}
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {v.tags?.map((tag, ti) => (
+                      <span key={ti} className="px-2 py-0.5 bg-dark-600 text-dark-400 rounded text-xs">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Thumbnail Idea */}
+                  {v.thumbnailIdea && (
+                    <div className="p-2 bg-dark-800 rounded-lg mb-3">
+                      <p className="text-xs text-dark-400">
+                        <span className="text-dark-300 font-medium">Thumbnail idea:</span> {v.thumbnailIdea}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Metadata */}
+                  <div className="flex items-center gap-3">
+                    <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs font-medium">
+                      {v.hookType}
+                    </span>
+                    <span className="px-2 py-1 bg-dark-600 text-dark-300 rounded text-xs">
+                      {v.tone}
+                    </span>
+                    <div className="flex items-center gap-4 ml-auto text-xs text-dark-400">
+                      <span className="flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" />
+                        {v.performanceScore}%
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Target className="w-3 h-3" />
+                        {v.tasteScore}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Rating */}
+                  <div className="mt-3 pt-3 border-t border-dark-600 flex items-center gap-3">
+                    <span className="text-xs text-dark-400">Rate this:</span>
+                    <StarRating
+                      rating={0}
+                      onRate={async (rating) => {
+                        await handleRate(v, rating, {}, 'youtube');
+                      }}
+                      size="sm"
+                    />
+                  </div>
+
+                  {v.reasoning && (
+                    <p className="mt-2 text-xs text-dark-400 italic">{v.reasoning}</p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

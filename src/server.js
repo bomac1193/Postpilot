@@ -25,6 +25,7 @@ const approvalRoutes = require('./routes/approval');
 const youtubeRoutes = require('./routes/youtube');
 const rolloutRoutes = require('./routes/rollout');
 const reelCollectionRoutes = require('./routes/reelCollection');
+const profileRoutes = require('./routes/profile');
 const schedulingService = require('./services/schedulingService');
 
 // Connect to MongoDB
@@ -96,6 +97,7 @@ app.use('/api/approval', approvalRoutes);
 app.use('/api/youtube', youtubeRoutes);
 app.use('/api/rollout', rolloutRoutes);
 app.use('/api/reel-collections', reelCollectionRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -137,7 +139,7 @@ app.listen(PORT, () => {
   console.log(`
   ╔═══════════════════════════════════════════════════════╗
   ║                                                       ║
-  ║     ✈️  PostPilot - AI Content Planner Started       ║
+  ║     🐼 PostPanda - AI Content Planner Started        ║
   ║                                                       ║
   ║     🌐 Server: http://localhost:${PORT}                 ║
   ║     📊 API: http://localhost:${PORT}/api              ║

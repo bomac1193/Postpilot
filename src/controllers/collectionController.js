@@ -7,10 +7,11 @@ const { validateObjectId } = require('../utils/validators');
  */
 exports.createCollection = async (req, res) => {
   try {
-    const { name, description, platform, gridConfig, scheduling, tags } = req.body;
+    const { name, description, platform, gridConfig, scheduling, tags, profileId } = req.body;
 
     const collection = new Collection({
       userId: req.user._id,
+      profileId: profileId || undefined, // Associate with profile if provided
       name,
       description,
       platform: platform || 'instagram',
@@ -39,9 +40,14 @@ exports.createCollection = async (req, res) => {
  */
 exports.getCollections = async (req, res) => {
   try {
-    const { status, platform, active } = req.query;
+    const { status, platform, active, profileId } = req.query;
 
     const filter = { userId: req.user._id };
+
+    // Filter by profile if provided
+    if (profileId) {
+      filter.profileId = profileId;
+    }
 
     if (status) filter.status = status;
     if (platform) filter.platform = platform;

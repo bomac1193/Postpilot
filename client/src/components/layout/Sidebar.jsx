@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAppStore } from '../../stores/useAppStore';
+import ProfileSwitcher from '../profile/ProfileSwitcher';
 import {
   LayoutGrid,
   Image,
@@ -12,6 +13,7 @@ import {
   ChevronRight,
   Youtube,
   Layers,
+  Users,
 } from 'lucide-react';
 
 // Custom magic wand logo icon for creator-magician brand
@@ -59,6 +61,7 @@ const navItems = [
   { path: '/editor/pro', icon: Wand2, label: 'Pro Editor' },
   { path: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { path: '/library', icon: FolderOpen, label: 'Media Library' },
+  { path: '/profiles', icon: Users, label: 'Profiles' },
   { path: '/connections', icon: Link2, label: 'Connections' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
@@ -81,7 +84,7 @@ function Sidebar() {
               <MagicWandLogo className="w-5 h-5 text-white" />
             </div>
             <span className="font-display font-semibold text-lg text-white tracking-tight">
-              Postpanda
+              Slayt
             </span>
           </div>
         )}
@@ -91,6 +94,9 @@ function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* Profile Switcher */}
+      <ProfileSwitcher collapsed={sidebarCollapsed} />
 
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto">

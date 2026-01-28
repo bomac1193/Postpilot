@@ -11,6 +11,7 @@ import ProEditor from './pages/ProEditor';
 import Calendar from './pages/Calendar';
 import MediaLibrary from './pages/MediaLibrary';
 import Connections from './pages/Connections';
+import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
 
 function App() {
@@ -59,6 +60,7 @@ function App() {
           <Route path="calendar" element={<Calendar />} />
           <Route path="library" element={<MediaLibrary />} />
           <Route path="connections" element={<Connections />} />
+          <Route path="profiles" element={<Profiles />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

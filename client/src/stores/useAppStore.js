@@ -1,29 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-// One-time cleanup of old localStorage data that was too large
-// This runs once on app load to fix quota exceeded issues
-try {
-  const storageKey = 'postpanda-storage';
-  const stored = localStorage.getItem(storageKey);
-  if (stored) {
-    const parsed = JSON.parse(stored);
-    // Check if stored data has large fields that shouldn't be persisted
-    if (parsed?.state?.posts?.length > 0 ||
-        parsed?.state?.reels?.length > 0 ||
-        parsed?.state?.youtubeVideos?.length > 0 ||
-        parsed?.state?.user?.avatar?.startsWith?.('data:')) {
-      console.log('[PostPanda] Clearing old localStorage data (migrating to cloud storage)');
-      localStorage.removeItem(storageKey);
-      localStorage.removeItem('postpilot-storage'); // Also clear old name
-    }
-  }
-} catch (e) {
-  // If parsing fails, just clear it
-  console.log('[PostPanda] Clearing corrupted localStorage');
-  localStorage.removeItem('postpanda-storage');
-  localStorage.removeItem('postpilot-storage');
-}
+// Note: Previous cleanup code removed - it was deleting YouTube collections.
+// YouTube collections are now persisted locally since the backend API isn't connected to the frontend yet.
 
 // Main application store
 export const useAppStore = create(
@@ -32,6 +11,10 @@ export const useAppStore = create(
       // User state
       user: null,
       isAuthenticated: false,
+
+      // Profile state
+      profiles: [],
+      currentProfileId: null,
 
       // Theme
       theme: 'dark',
@@ -103,7 +86,37 @@ export const useAppStore = create(
 
       // Actions
       setUser: (user) => set({ user, isAuthenticated: !!user }),
-      logout: () => set({ user: null, isAuthenticated: false }),
+      logout: () => set({ user: null, isAuthenticated: false, profiles: [], currentProfileId: null }),
+
+      // Profile actions
+      setProfiles: (profiles) => set({ profiles }),
+      addProfile: (profile) => set((state) => ({
+        profiles: [...state.profiles, profile]
+      })),
+      updateProfile: (id, updates) => set((state) => ({
+        profiles: state.profiles.map(p =>
+          (p._id || p.id) === id ? { ...p, ...updates } : p
+        )
+      })),
+      deleteProfile: (id) => set((state) => ({
+        profiles: state.profiles.filter(p => (p._id || p.id) !== id),
+        currentProfileId: state.currentProfileId === id
+          ? (state.profiles.find(p => (p._id || p.id) !== id)?._id || state.profiles.find(p => (p._id || p.id) !== id)?.id || null)
+          : state.currentProfileId
+      })),
+      setCurrentProfile: (id) => set({ currentProfileId: id }),
+      getCurrentProfile: () => {
+        const state = get();
+        return state.profiles.find(p => (p._id || p.id) === state.currentProfileId) || null;
+      },
+      // Set current profile to default if not set
+      ensureCurrentProfile: () => {
+        const state = get();
+        if (!state.currentProfileId && state.profiles.length > 0) {
+          const defaultProfile = state.profiles.find(p => p.isDefault) || state.profiles[0];
+          set({ currentProfileId: defaultProfile._id || defaultProfile.id });
+        }
+      },
 
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
@@ -653,7 +666,7 @@ export const useAppStore = create(
       },
     }),
     {
-      name: 'postpanda-storage',
+      name: 'slayt-storage',
       storage: {
         getItem: (name) => {
           try {
@@ -662,13 +675,13 @@ export const useAppStore = create(
             let source = name;
 
             // If not found or empty, try migrating from old storage names
-            const oldNames = ['postpilot-storage', 'postpanda-store', 'postpilot-store'];
+            const oldNames = ['postpanda-storage', 'postpilot-storage', 'postpanda-store', 'postpilot-store'];
 
             if (!str) {
               for (const oldName of oldNames) {
                 const oldStr = localStorage.getItem(oldName);
                 if (oldStr) {
-                  console.log(`[Postpanda] Found data in ${oldName}, migrating to ${name}`);
+                  console.log(`[Slayt] Found data in ${oldName}, migrating to ${name}`);
                   str = oldStr;
                   source = oldName;
                   // Save to new name
@@ -684,18 +697,18 @@ export const useAppStore = create(
               const videoCount = parsed?.state?.youtubeVideos?.length || 0;
               const collectionCount = parsed?.state?.youtubeCollections?.length || 0;
               const videosByCollectionKeys = Object.keys(parsed?.state?.youtubeVideosByCollection || {});
-              console.log(`[Postpanda] Loaded from ${source}:`, {
+              console.log(`[Slayt] Loaded from ${source}:`, {
                 youtubeVideos: videoCount,
                 youtubeCollections: collectionCount,
                 videosByCollectionKeys,
               });
               return parsed;
             } else {
-              console.log('[Postpanda] No saved data found in localStorage');
+              console.log('[Slayt] No saved data found in localStorage');
               return null;
             }
           } catch (e) {
-            console.error('[Postpanda] Failed to load from localStorage:', e);
+            console.error('[Slayt] Failed to load from localStorage:', e);
             return null;
           }
         },
@@ -745,20 +758,22 @@ export const useAppStore = create(
         // User profile - avatar URL is now small (Cloudinary URL), so we can persist it
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        // Current profile selection (profiles themselves come from backend)
+        currentProfileId: state.currentProfileId,
         // Reel order for custom sorting (just IDs, not full objects)
         reelOrder: state.reelOrder,
-        // YouTube Planner - only persist small data
+        // YouTube Planner - only persist UI settings, data comes from MongoDB
         youtubeViewMode: state.youtubeViewMode,
         youtubeCompetitors: state.youtubeCompetitors,
         youtubeChannelSettings: state.youtubeChannelSettings,
-        // YouTube Collections - just IDs and names, not full video data
+        // YouTube collections/videos are now stored in MongoDB - only persist selection ID
         currentYoutubeCollectionId: state.currentYoutubeCollectionId,
         // Reel collections - just the current selection
         currentReelCollectionId: state.currentReelCollectionId,
-        // Rollouts - just current selection
+        // Rollouts - persist selection (data should come from backend)
         currentRolloutId: state.currentRolloutId,
       }),
-      // Simple merge - most data now comes from DB, only persist small settings
+      // Merge persisted state with current state
       merge: (persistedState, currentState) => {
         return {
           ...currentState,
@@ -769,10 +784,13 @@ export const useAppStore = create(
           youtubeViewMode: persistedState?.youtubeViewMode || currentState.youtubeViewMode,
           youtubeCompetitors: persistedState?.youtubeCompetitors || currentState.youtubeCompetitors,
           youtubeChannelSettings: persistedState?.youtubeChannelSettings || currentState.youtubeChannelSettings,
-          // Preserve collection selections
+          // YouTube data comes from backend now - only preserve selection ID
           currentYoutubeCollectionId: persistedState?.currentYoutubeCollectionId || currentState.currentYoutubeCollectionId,
+          // Preserve reel collection selection
           currentReelCollectionId: persistedState?.currentReelCollectionId || currentState.currentReelCollectionId,
           currentRolloutId: persistedState?.currentRolloutId || currentState.currentRolloutId,
+          // Preserve profile selection (profiles list comes from backend)
+          currentProfileId: persistedState?.currentProfileId || currentState.currentProfileId,
         };
       },
     }

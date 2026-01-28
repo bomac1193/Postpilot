@@ -190,6 +190,23 @@ export const rolloutApi = {
     const { data } = await api.delete(`/api/rollout/${rolloutId}/sections/${sectionId}/collections/${collectionId}`);
     return data;
   },
+
+  // Scheduling
+  async scheduleRollout(rolloutId, scheduleData) {
+    const { data } = await api.put(`/api/rollout/${rolloutId}/schedule`, scheduleData);
+    return data;
+  },
+  async setSectionDeadline(rolloutId, sectionId, deadlineData) {
+    const { data } = await api.put(`/api/rollout/${rolloutId}/sections/${sectionId}/deadline`, deadlineData);
+    return data;
+  },
+  async getScheduledRollouts(startDate, endDate) {
+    const params = {};
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    const { data } = await api.get('/api/rollout/calendar/scheduled', { params });
+    return data;
+  },
 };
 
 // Content API
@@ -271,8 +288,9 @@ export const contentApi = {
 
 // Grid API
 export const gridApi = {
-  async getAll() {
-    const { data } = await api.get('/api/grid');
+  async getAll(profileId = null) {
+    const params = profileId ? { profileId } : {};
+    const { data } = await api.get('/api/grid', { params });
     return data;
   },
 
@@ -460,6 +478,94 @@ export const platformApi = {
 
   async refreshToken(platform) {
     const { data } = await api.post(`/api/auth/${platform}/refresh`);
+    return data;
+  },
+};
+
+// Profile API
+export const profileApi = {
+  // Get all profiles for user
+  async getAll() {
+    const { data } = await api.get('/api/profile');
+    return data.profiles || [];
+  },
+
+  // Get current/active profile (creates default if needed)
+  async getCurrent() {
+    const { data } = await api.get('/api/profile/current');
+    return data.profile;
+  },
+
+  // Get profile by ID
+  async getById(id) {
+    const { data } = await api.get(`/api/profile/${id}`);
+    return data.profile;
+  },
+
+  // Create a new profile
+  async create(profileData) {
+    const { data } = await api.post('/api/profile', profileData);
+    return data.profile;
+  },
+
+  // Update a profile
+  async update(id, updates) {
+    const { data } = await api.put(`/api/profile/${id}`, updates);
+    return data.profile;
+  },
+
+  // Delete a profile
+  async delete(id) {
+    await api.delete(`/api/profile/${id}`);
+  },
+
+  // Activate a profile (set as current working profile)
+  async activate(id) {
+    const { data } = await api.post(`/api/profile/${id}/activate`);
+    return data.profile;
+  },
+
+  // Set as default profile
+  async setDefault(id) {
+    const { data } = await api.post(`/api/profile/${id}/set-default`);
+    return data.profile;
+  },
+
+  // Get social connection status for a profile
+  async getSocialStatus(id) {
+    const { data } = await api.get(`/api/profile/${id}/social/status`);
+    return data;
+  },
+
+  // Instagram connection
+  async connectInstagram(profileId) {
+    const { data } = await api.post(`/api/profile/${profileId}/instagram/connect`);
+    return data.url;
+  },
+
+  async useParentInstagram(profileId) {
+    const { data } = await api.post(`/api/profile/${profileId}/instagram/use-parent`);
+    return data;
+  },
+
+  async disconnectInstagram(profileId) {
+    const { data } = await api.post(`/api/profile/${profileId}/instagram/disconnect`);
+    return data;
+  },
+
+  // TikTok connection
+  async connectTiktok(profileId) {
+    const { data } = await api.post(`/api/profile/${profileId}/tiktok/connect`);
+    return data.url;
+  },
+
+  async useParentTiktok(profileId) {
+    const { data } = await api.post(`/api/profile/${profileId}/tiktok/use-parent`);
+    return data;
+  },
+
+  async disconnectTiktok(profileId) {
+    const { data } = await api.post(`/api/profile/${profileId}/tiktok/disconnect`);
     return data;
   },
 };

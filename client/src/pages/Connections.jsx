@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '../stores/useAppStore';
-import { platformApi } from '../lib/api';
+import { platformApi, profileApi } from '../lib/api';
 import {
   Instagram,
   Youtube,
@@ -15,6 +15,8 @@ import {
   ExternalLink,
   AlertCircle,
   Loader2,
+  User,
+  ChevronDown,
 } from 'lucide-react';
 
 // Platform configs with their colors and features
@@ -107,9 +109,35 @@ function Connections() {
   const connectedPlatforms = useAppStore((state) => state.connectedPlatforms);
   const connectPlatform = useAppStore((state) => state.connectPlatform);
   const disconnectPlatform = useAppStore((state) => state.disconnectPlatform);
+  const profiles = useAppStore((state) => state.profiles);
+  const currentProfileId = useAppStore((state) => state.currentProfileId);
   const [connecting, setConnecting] = useState(null);
   const [refreshing, setRefreshing] = useState(null);
   const [refreshSuccess, setRefreshSuccess] = useState(null);
+  const [profileSocialStatus, setProfileSocialStatus] = useState({});
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [showProfileConnections, setShowProfileConnections] = useState(true);
+
+  const currentProfile = profiles.find(p => (p._id || p.id) === currentProfileId);
+
+  // Load social status for current profile
+  useEffect(() => {
+    const loadProfileStatus = async () => {
+      if (!currentProfileId) return;
+
+      try {
+        setLoadingStatus(true);
+        const status = await profileApi.getSocialStatus(currentProfileId);
+        setProfileSocialStatus(status);
+      } catch (err) {
+        console.error('Failed to load profile social status:', err);
+      } finally {
+        setLoadingStatus(false);
+      }
+    };
+
+    loadProfileStatus();
+  }, [currentProfileId]);
 
   const handleConnect = async (platform) => {
     if (platform.comingSoon) return;
@@ -141,6 +169,50 @@ function Connections() {
       alert(`Failed to refresh ${platformId} token. You may need to reconnect.`);
     } finally {
       setRefreshing(null);
+    }
+  };
+
+  // Profile-specific connection handlers
+  const handleUseParentConnection = async (platform) => {
+    if (!currentProfileId) return;
+
+    try {
+      setConnecting(platform);
+      if (platform === 'instagram') {
+        await profileApi.useParentInstagram(currentProfileId);
+      } else if (platform === 'tiktok') {
+        await profileApi.useParentTiktok(currentProfileId);
+      }
+      // Refresh status
+      const status = await profileApi.getSocialStatus(currentProfileId);
+      setProfileSocialStatus(status);
+    } catch (error) {
+      console.error('Failed to use parent connection:', error);
+      alert(`Failed to set parent connection for ${platform}`);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const handleConnectOwnAccount = async (platform) => {
+    if (!currentProfileId) return;
+
+    try {
+      setConnecting(platform);
+      let url;
+      if (platform === 'instagram') {
+        url = await profileApi.connectInstagram(currentProfileId);
+      } else if (platform === 'tiktok') {
+        url = await profileApi.connectTiktok(currentProfileId);
+      }
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (error) {
+      console.error('Failed to start connection:', error);
+      alert(`Failed to start ${platform} connection`);
+    } finally {
+      setConnecting(null);
     }
   };
 
@@ -180,7 +252,199 @@ function Connections() {
         </div>
       </div>
 
-      {/* Platforms Grid */}
+      {/* Current Profile Connections */}
+      {currentProfile && (
+        <div className="mb-8">
+          <button
+            onClick={() => setShowProfileConnections(!showProfileConnections)}
+            className="w-full flex items-center justify-between p-4 bg-dark-800 rounded-xl border border-dark-700 hover:bg-dark-750 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: currentProfile.color || '#8b5cf6' }}
+              >
+                {currentProfile.avatar ? (
+                  <img
+                    src={currentProfile.avatar}
+                    alt={currentProfile.name}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="w-5 h-5 text-white" />
+                )}
+              </div>
+              <div className="text-left">
+                <h3 className="font-medium text-dark-100">
+                  {currentProfile.name} Connections
+                </h3>
+                <p className="text-sm text-dark-400">
+                  Manage connections for this profile
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              className={`w-5 h-5 text-dark-400 transition-transform ${
+                showProfileConnections ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {showProfileConnections && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Instagram for Profile */}
+              <div className="bg-dark-800 rounded-xl border border-dark-700 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0">
+                    <Instagram className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-medium text-dark-100">Instagram</h3>
+                      {profileSocialStatus.instagram?.connected && (
+                        <span className="badge badge-green">Connected</span>
+                      )}
+                    </div>
+
+                    {loadingStatus ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-dark-400" />
+                    ) : profileSocialStatus.instagram?.connected ? (
+                      <>
+                        <p className="text-sm text-dark-400 mb-2">
+                          {profileSocialStatus.instagram.useParent
+                            ? 'Using parent account'
+                            : 'Using own account'}
+                          {profileSocialStatus.instagram.username &&
+                            `: @${profileSocialStatus.instagram.username}`}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {profileSocialStatus.instagram.useParent ? (
+                            <button
+                              onClick={() => handleConnectOwnAccount('instagram')}
+                              className="text-xs text-accent-purple hover:underline"
+                              disabled={connecting === 'instagram'}
+                            >
+                              {connecting === 'instagram' ? 'Connecting...' : 'Connect own account'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleUseParentConnection('instagram')}
+                              className="text-xs text-dark-400 hover:text-dark-200"
+                              disabled={connecting === 'instagram'}
+                            >
+                              {connecting === 'instagram' ? 'Switching...' : 'Use parent account'}
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-dark-500 mb-2">Not connected</p>
+                        <button
+                          onClick={() => handleUseParentConnection('instagram')}
+                          className="btn-primary text-sm py-1.5"
+                          disabled={connecting === 'instagram'}
+                        >
+                          {connecting === 'instagram' ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            <>
+                              <Link2 className="w-3 h-3" />
+                              Use Parent Connection
+                            </>
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* TikTok for Profile */}
+              <div className="bg-dark-800 rounded-xl border border-dark-700 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-black flex items-center justify-center flex-shrink-0">
+                    <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-medium text-dark-100">TikTok</h3>
+                      {profileSocialStatus.tiktok?.connected && (
+                        <span className="badge badge-green">Connected</span>
+                      )}
+                    </div>
+
+                    {loadingStatus ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-dark-400" />
+                    ) : profileSocialStatus.tiktok?.connected ? (
+                      <>
+                        <p className="text-sm text-dark-400 mb-2">
+                          {profileSocialStatus.tiktok.useParent
+                            ? 'Using parent account'
+                            : 'Using own account'}
+                          {profileSocialStatus.tiktok.username &&
+                            `: @${profileSocialStatus.tiktok.username}`}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {profileSocialStatus.tiktok.useParent ? (
+                            <button
+                              onClick={() => handleConnectOwnAccount('tiktok')}
+                              className="text-xs text-accent-purple hover:underline"
+                              disabled={connecting === 'tiktok'}
+                            >
+                              {connecting === 'tiktok' ? 'Connecting...' : 'Connect own account'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleUseParentConnection('tiktok')}
+                              className="text-xs text-dark-400 hover:text-dark-200"
+                              disabled={connecting === 'tiktok'}
+                            >
+                              {connecting === 'tiktok' ? 'Switching...' : 'Use parent account'}
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-dark-500 mb-2">Not connected</p>
+                        <button
+                          onClick={() => handleUseParentConnection('tiktok')}
+                          className="btn-primary text-sm py-1.5"
+                          disabled={connecting === 'tiktok'}
+                        >
+                          {connecting === 'tiktok' ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            <>
+                              <Link2 className="w-3 h-3" />
+                              Use Parent Connection
+                            </>
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Account-Level Platforms Grid */}
+      <div className="mb-4">
+        <h2 className="text-lg font-medium text-dark-100 mb-1">Account Connections</h2>
+        <p className="text-sm text-dark-400">These connections are shared across all your profiles</p>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {PLATFORMS.map((platform) => {
           const connection = connectedPlatforms[platform.id];

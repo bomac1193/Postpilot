@@ -3,6 +3,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 const User = require('../models/User');
+const Profile = require('../models/Profile');
 
 /**
  * Social Media Posting Service
@@ -10,6 +11,98 @@ const User = require('../models/User');
  */
 
 class SocialMediaService {
+  /**
+   * Get credentials for a profile, resolving to profile's own or parent's credentials
+   * @param {string} profileId - Profile ID
+   * @param {string} platform - 'instagram' or 'tiktok'
+   * @returns {Promise<Object>} Credentials object or null
+   */
+  async getCredentialsForProfile(profileId, platform) {
+    try {
+      const profile = await Profile.findById(profileId);
+      if (!profile) {
+        return null;
+      }
+
+      return await profile.getEffectiveConnection(platform);
+    } catch (error) {
+      console.error('Get credentials for profile error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Post content using profile credentials (resolves to profile or parent user)
+   * @param {string} profileId - Profile ID
+   * @param {Object} content - Content document to post
+   * @param {Object} options - Posting options
+   * @returns {Promise<Object>} Post result
+   */
+  async postWithProfile(profileId, content, options = {}) {
+    const profile = await Profile.findById(profileId).populate('userId');
+    if (!profile) {
+      throw new Error('Profile not found');
+    }
+
+    const platform = options.platform || content.platform || 'instagram';
+    const credentials = await this.getCredentialsForProfile(profileId, platform);
+
+    if (!credentials || !credentials.connected) {
+      throw new Error(`${platform} is not connected for this profile`);
+    }
+
+    // Create a mock user object with the resolved credentials
+    const userWithCredentials = {
+      socialAccounts: {
+        [platform]: {
+          connected: credentials.connected,
+          accessToken: credentials.accessToken,
+          refreshToken: credentials.refreshToken,
+          userId: credentials.userId,
+          username: credentials.username,
+          expiresAt: credentials.expiresAt
+        }
+      }
+    };
+
+    if (platform === 'instagram') {
+      return await this.postToInstagram(userWithCredentials, content, options);
+    } else if (platform === 'tiktok') {
+      return await this.postToTikTok(userWithCredentials, content, options);
+    } else if (platform === 'both') {
+      return await this.postToBothWithProfile(profileId, content, options);
+    }
+
+    throw new Error(`Unsupported platform: ${platform}`);
+  }
+
+  /**
+   * Post to both platforms using profile credentials
+   */
+  async postToBothWithProfile(profileId, content, options = {}) {
+    const results = {
+      instagram: null,
+      tiktok: null,
+      errors: []
+    };
+
+    // Post to Instagram
+    try {
+      results.instagram = await this.postWithProfile(profileId, content, { ...options, platform: 'instagram' });
+    } catch (error) {
+      results.errors.push({ platform: 'instagram', error: error.message });
+    }
+
+    // Post to TikTok
+    try {
+      results.tiktok = await this.postWithProfile(profileId, content, { ...options, platform: 'tiktok' });
+    } catch (error) {
+      results.errors.push({ platform: 'tiktok', error: error.message });
+    }
+
+    return results;
+  }
+
   /**
    * Post content to Instagram
    * @param {Object} user - User document with Instagram credentials

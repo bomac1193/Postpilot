@@ -105,6 +105,9 @@ function GridPlanner() {
   // Rollouts for assignment
   const rollouts = useAppStore((state) => state.rollouts);
 
+  // Current profile for filtering
+  const currentProfileId = useAppStore((state) => state.currentProfileId);
+
   // Backend state
   const [grids, setGrids] = useState([]);
   const [currentGridId, setCurrentGridId] = useState(null);
@@ -161,34 +164,11 @@ function GridPlanner() {
   // Reels state from store
   const addReel = useAppStore((state) => state.addReel);
 
-  // Fetch all grids from backend
-  const fetchGrids = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await gridApi.getAll();
-      const gridList = Array.isArray(data) ? data : data.grids || [];
-      setGrids(gridList);
-
-      // If we have grids, select the first one (or active one)
-      if (gridList.length > 0) {
-        const activeGrid = gridList.find(g => g.isActive) || gridList[0];
-        setCurrentGridId(activeGrid._id);
-        await loadGridContent(activeGrid);
-      } else {
-        setGridPosts([]);
-      }
-    } catch (err) {
-      console.error('Failed to fetch grids:', err);
-      setError(err.message || 'Failed to load grids');
-    } finally {
-      setLoading(false);
-    }
-  }, [setGridPosts]);
-
-  // Load a specific grid's content
+  // Load a specific grid's content (defined first since fetchGrids depends on it)
   const loadGridContent = useCallback(async (grid) => {
+    console.log('[loadGridContent] Called with grid:', grid?._id, 'cells:', grid?.cells?.length);
     if (!grid || !grid.cells) {
+      console.log('[loadGridContent] No grid or cells, clearing posts');
       setGridPosts([]);
       return;
     }
@@ -203,6 +183,7 @@ function GridPlanner() {
       if (!cell.isEmpty && cell.contentId) {
         // contentId might be populated or just an ID
         const content = typeof cell.contentId === 'object' ? cell.contentId : null;
+        console.log('[loadGridContent] Cell at', cell.position, 'contentId type:', typeof cell.contentId, 'populated:', !!content, 'mediaUrl:', content?.mediaUrl);
         // Get carousel images or fall back to single image
         const carouselImages = content?.carouselImages?.length > 0 ? content.carouselImages : null;
         const mainImage = carouselImages?.[0] || content?.mediaUrl || null;
@@ -222,8 +203,34 @@ function GridPlanner() {
 
     // Sort by grid position
     posts.sort((a, b) => (a.gridPosition || 0) - (b.gridPosition || 0));
+    console.log('[loadGridContent] Setting', posts.length, 'posts:', posts.map(p => ({ id: p.id, image: p.image?.substring(0, 50) })));
     setGridPosts(posts);
   }, [setGridPosts]);
+
+  // Fetch all grids from backend
+  const fetchGrids = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Pass currentProfileId to filter grids by profile
+      const data = await gridApi.getAll(currentProfileId);
+      const gridList = Array.isArray(data) ? data : data.grids || [];
+
+      // If we have grids, select the first one (or active one)
+      if (gridList.length > 0) {
+        const activeGrid = gridList.find(g => g.isActive) || gridList[0];
+        setCurrentGridId(activeGrid._id);
+        await loadGridContent(activeGrid);
+      } else {
+        setGridPosts([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch grids:', err);
+      setError(err.message || 'Failed to load grids');
+    } finally {
+      setLoading(false);
+    }
+  }, [setGridPosts, loadGridContent, currentProfileId]);
 
   // Refresh current grid from server
   const refreshCurrentGrid = useCallback(async () => {
@@ -264,6 +271,7 @@ function GridPlanner() {
         name: `Grid ${grids.length + 1}`,
         platform: 'instagram',
         columns: 3,
+        profileId: currentProfileId || undefined, // Associate with current profile
       });
       setGrids([...grids, newGrid]);
       setCurrentGridId(newGrid._id);
@@ -368,6 +376,13 @@ function GridPlanner() {
   useEffect(() => {
     fetchGrids();
   }, [fetchGrids]);
+
+  // Refetch grids when profile changes
+  useEffect(() => {
+    if (currentProfileId) {
+      fetchGrids();
+    }
+  }, [currentProfileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -576,6 +591,7 @@ function GridPlanner() {
           platform: 'instagram',
           columns: cols,
           totalRows: Math.ceil(imageFiles.length / cols) + 3,
+          profileId: currentProfileId || undefined, // Associate with current profile
         });
         const createdGrid = newGrid.grid || newGrid;
         gridId = createdGrid._id;
@@ -642,22 +658,30 @@ function GridPlanner() {
 
     // Update grid posts
     if (newPosts.length > 0) {
-      setGridPosts([...gridPosts, ...newPosts]);
-      // Refresh from server to ensure state is synced
+      console.log('[handleFileDrop] Uploaded', newPosts.length, 'files, refreshing from server...');
+      // Refresh from server to ensure state is synced - load the actual server data
       if (gridId) {
         try {
           const response = await gridApi.getById(gridId);
           const freshGrid = response.grid || response;
+          console.log('[handleFileDrop] Got fresh grid from server, cells:', freshGrid?.cells?.length);
           setGrids(prev => prev.map(g => g._id === freshGrid._id ? freshGrid : g));
+          // IMPORTANT: Reload the posts from the fresh server data
+          await loadGridContent(freshGrid);
         } catch (err) {
           console.error('Failed to refresh grid after upload:', err);
+          // Fall back to using local data if server refresh fails
+          setGridPosts([...gridPosts, ...newPosts]);
         }
+      } else {
+        // No grid ID - just use local data
+        setGridPosts([...gridPosts, ...newPosts]);
       }
     }
 
     setUploading(false);
     setUploadProgress({ current: 0, total: 0 });
-  }, [gridPosts, setGridPosts, currentGridId, currentLayout, grids, isAuthenticated, addReel]);
+  }, [gridPosts, setGridPosts, currentGridId, currentLayout, grids, isAuthenticated, addReel, loadGridContent]);
 
   // Helper to check if any items in dataTransfer are videos
   const hasVideoFiles = useCallback((dataTransfer) => {

@@ -34,7 +34,7 @@ const populateGrid = async (gridId) => {
 // Create new grid
 exports.createGrid = async (req, res) => {
   try {
-    const { name, platform, columns, totalRows } = req.body;
+    const { name, platform, columns, totalRows, profileId } = req.body;
 
     // Initialize empty cells
     const cells = [];
@@ -46,6 +46,7 @@ exports.createGrid = async (req, res) => {
 
     const grid = new Grid({
       userId: req.userId,
+      profileId: profileId || undefined, // Associate with profile if provided
       name: name || 'Untitled Grid',
       platform: platform || 'instagram',
       columns: columns || 3,
@@ -69,10 +70,27 @@ exports.createGrid = async (req, res) => {
 // Get all grids for user
 exports.getAllGrids = async (req, res) => {
   try {
-    const grids = await Grid.find({ userId: req.userId })
+    const { profileId } = req.query;
+    const filter = { userId: req.userId };
+
+    // Filter by profile if provided
+    if (profileId) {
+      filter.profileId = profileId;
+    }
+
+    const grids = await Grid.find(filter)
       .populate('cells.contentId')
       .sort({ updatedAt: -1 });
     grids.forEach(normalizeGrid);
+
+    // Log for debugging
+    grids.forEach(g => {
+      const nonEmptyCells = g.cells?.filter(c => !c.isEmpty) || [];
+      console.log('[getAllGrids] Grid', g._id, 'has', nonEmptyCells.length, 'non-empty cells');
+      nonEmptyCells.forEach(c => {
+        console.log('  - Cell at', c.position, 'contentId:', c.contentId?._id || c.contentId, 'mediaUrl:', c.contentId?.mediaUrl?.substring(0, 50));
+      });
+    });
 
     res.json({ grids });
   } catch (error) {
@@ -156,6 +174,7 @@ exports.addRow = async (req, res) => {
     }
 
     grid.totalRows += 1;
+    grid.markModified('cells');
     await grid.save();
     const populated = await populateGrid(grid._id);
 
@@ -185,6 +204,7 @@ exports.removeRow = async (req, res) => {
     grid.cells = grid.cells.filter(cell => cell.position.row !== lastRow);
     grid.totalRows -= 1;
 
+    grid.markModified('cells');
     await grid.save();
     const populated = await populateGrid(grid._id);
 
@@ -205,16 +225,21 @@ exports.addContentToGrid = async (req, res) => {
     const rowNum = Number(row) || 0;
     const colNum = Number(col) || 0;
 
+    console.log('[addContentToGrid] Adding content', contentId, 'to grid', req.params.id, 'at row:', rowNum, 'col:', colNum);
+
     const grid = await Grid.findOne({ _id: req.params.id, userId: req.userId });
     if (!grid) {
+      console.log('[addContentToGrid] Grid not found:', req.params.id);
       return res.status(404).json({ error: 'Grid not found' });
     }
 
     // Verify content exists and belongs to user
     const content = await Content.findOne({ _id: contentId, userId: req.userId });
     if (!content) {
+      console.log('[addContentToGrid] Content not found:', contentId);
       return res.status(404).json({ error: 'Content not found' });
     }
+    console.log('[addContentToGrid] Found content with mediaUrl:', content.mediaUrl);
 
     // Auto-expand grid if needed
     const neededRows = rowNum + 1;
@@ -242,8 +267,13 @@ exports.addContentToGrid = async (req, res) => {
     cell.isEmpty = false;
     cell.crop = { ...DEFAULT_CROP };
 
+    // Mark cells array as modified to ensure Mongoose detects subdocument changes
+    grid.markModified('cells');
+
+    console.log('[addContentToGrid] Saving grid with cell at row:', rowNum, 'col:', colNum, 'contentId:', contentId);
     await grid.save();
     const populated = await populateGrid(grid._id);
+    console.log('[addContentToGrid] Grid saved and populated. Non-empty cells:', populated.cells?.filter(c => !c.isEmpty).length);
 
     res.json({
       message: 'Content added to grid successfully',
@@ -280,6 +310,9 @@ exports.removeContentFromGrid = async (req, res) => {
     cell.contentId = null;
     cell.isEmpty = true;
     cell.crop = { ...DEFAULT_CROP };
+
+    // Mark cells array as modified
+    grid.markModified('cells');
 
     await grid.save();
     const populated = await populateGrid(grid._id);
@@ -416,6 +449,7 @@ exports.updateCellCrop = async (req, res) => {
     }
 
     cell.crop = sanitizeCrop(crop);
+    grid.markModified('cells');
     await grid.save();
     const populated = await populateGrid(grid._id);
 

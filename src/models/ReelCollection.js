@@ -7,6 +7,12 @@ const reelCollectionSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  // Profile this reel collection belongs to (optional for backward compatibility)
+  profileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile',
+    index: true
+  },
   name: {
     type: String,
     required: true,

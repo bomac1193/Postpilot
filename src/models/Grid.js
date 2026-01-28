@@ -6,6 +6,12 @@ const gridSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  // Profile this grid belongs to (optional for backward compatibility)
+  profileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile',
+    index: true
+  },
   name: {
     type: String,
     required: true,

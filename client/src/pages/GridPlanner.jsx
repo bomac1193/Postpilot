@@ -839,7 +839,8 @@ function GridPlanner() {
               {showGridSelector && (
                 <div className="absolute top-full left-0 mt-2 w-72 bg-dark-700 rounded-lg shadow-xl border border-dark-600 z-20">
                   <div className="p-2 border-b border-dark-600">
-                    <p className="text-xs text-dark-400 uppercase tracking-wide">Your Collections ({grids.length})</p>
+                    <p className="text-xs text-dark-400 uppercase tracking-wide">Your Collections ({grids.length}) {loading ? '(loading...)' : ''}</p>
+                    {console.log('[Dropdown] Rendering with grids:', grids.length, 'loading:', loading, grids)}
                   </div>
                   <div className="max-h-64 overflow-auto">
                     {grids.map((grid) => (

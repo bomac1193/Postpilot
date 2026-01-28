@@ -112,8 +112,8 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
     setIsShiftDrag(shiftHeld);
 
     setIsDragging(true);
-    e.dataTransfer.setData('application/postpanda-item', postId);
-    e.dataTransfer.setData('application/postpanda-shift', shiftHeld ? 'true' : 'false');
+    e.dataTransfer.setData('application/slayt-item', postId);
+    e.dataTransfer.setData('application/slayt-shift', shiftHeld ? 'true' : 'false');
     e.dataTransfer.effectAllowed = 'move';
 
     // Create a custom drag image
@@ -151,7 +151,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
       setInternalDragActive(true);
       setIsFileOver(true);
       setIsOver(false);
-    } else if (e.dataTransfer.types.includes('application/postpanda-item')) {
+    } else if (e.dataTransfer.types.includes('application/slayt-item')) {
       setIsOver(true);
       setIsFileOver(false);
     }
@@ -162,7 +162,7 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
     e.stopPropagation();
 
     // Check if it's an internal item drag
-    if (e.dataTransfer.types.includes('application/postpanda-item')) {
+    if (e.dataTransfer.types.includes('application/slayt-item')) {
       e.dataTransfer.dropEffect = 'move';
     }
     // Check if it's a file drag from outside (Windows Explorer)
@@ -196,11 +196,11 @@ function DraggableGridItem({ post, postId, onDragStart, onDragEnd, onFileDrop, o
     setIsFileOver(false);
 
     // Check for internal item drag first
-    const sourceId = e.dataTransfer.getData('application/postpanda-item');
+    const sourceId = e.dataTransfer.getData('application/slayt-item');
 
     if (sourceId && sourceId !== postId) {
       // Check if shift was held during drag
-      const wasShiftDrag = e.dataTransfer.getData('application/postpanda-shift') === 'true';
+      const wasShiftDrag = e.dataTransfer.getData('application/slayt-shift') === 'true';
 
       if (wasShiftDrag) {
         // Shift+drag = show replace/carousel modal
@@ -345,7 +345,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragStart = (e) => {
     e.stopPropagation();
     setIsDragging(true);
-    e.dataTransfer.setData('application/postpanda-reel', reelId);
+    e.dataTransfer.setData('application/slayt-reel', reelId);
     e.dataTransfer.effectAllowed = 'move';
 
     // Create a custom drag image
@@ -368,7 +368,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragEnter = (e) => {
     e.preventDefault();
     // Only handle internal reel drags, let file drops bubble up
-    if (e.dataTransfer.types.includes('application/postpanda-reel')) {
+    if (e.dataTransfer.types.includes('application/slayt-reel')) {
       e.stopPropagation();
       dragCounterRef.current++;
       setIsOver(true);
@@ -378,7 +378,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragOver = (e) => {
     e.preventDefault();
     // Only handle internal reel drags, let file drops bubble up
-    if (e.dataTransfer.types.includes('application/postpanda-reel')) {
+    if (e.dataTransfer.types.includes('application/slayt-reel')) {
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
     }
@@ -387,7 +387,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
   const handleDragLeave = (e) => {
     e.preventDefault();
     // Only handle internal reel drags
-    if (e.dataTransfer.types.includes('application/postpanda-reel')) {
+    if (e.dataTransfer.types.includes('application/slayt-reel')) {
       e.stopPropagation();
       dragCounterRef.current--;
       if (dragCounterRef.current === 0) {
@@ -400,7 +400,7 @@ function DraggableReelItem({ reel, reelId, onEdit, onPlay, onReorder }) {
     e.preventDefault();
 
     // Only handle internal reel drags, let file drops bubble up to parent
-    const sourceId = e.dataTransfer.getData('application/postpanda-reel');
+    const sourceId = e.dataTransfer.getData('application/slayt-reel');
     if (sourceId && sourceId !== reelId) {
       e.stopPropagation();
       dragCounterRef.current = 0;
@@ -619,6 +619,10 @@ function RolloutPickerModal({ collectionId, collectionName, platform, rollouts, 
 // Post Preview Modal - for viewing/editing posts in locked mode
 function PostPreviewModal({ post, onClose, onSave }) {
   const user = useAppStore((state) => state.user);
+  const profiles = useAppStore((state) => state.profiles);
+  const currentProfileId = useAppStore((state) => state.currentProfileId);
+  const currentProfile = profiles.find(p => (p._id || p.id) === currentProfileId);
+
   const [activeTab, setActiveTab] = useState('edit'); // 'edit' | 'instagram' | 'tiktok'
   const [caption, setCaption] = useState(post?.caption || '');
   const [hashtags, setHashtags] = useState(post?.hashtags?.join(' ') || '');
@@ -634,10 +638,10 @@ function PostPreviewModal({ post, onClose, onSave }) {
   const isCarousel = carouselImages.length > 1;
   const currentImage = carouselImages[currentIndex] || carouselImages[0];
 
-  // Get usernames from connected social accounts
-  const instagramUsername = user?.socialAccounts?.instagram?.username || user?.name || 'username';
-  const tiktokUsername = user?.socialAccounts?.tiktok?.username || user?.name || 'username';
-  const userAvatar = user?.avatar;
+  // Get usernames from connected social accounts - prefer profile data
+  const instagramUsername = currentProfile?.username || user?.socialAccounts?.instagram?.username || user?.name || 'username';
+  const tiktokUsername = currentProfile?.username || user?.socialAccounts?.tiktok?.username || user?.name || 'username';
+  const userAvatar = currentProfile?.avatar || user?.avatar;
 
   // Carousel navigation
   const goToPrev = () => {
@@ -1225,6 +1229,25 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   const user = useAppStore((state) => state.user);
   const setUser = useAppStore((state) => state.setUser);
   const setGridPosts = useAppStore((state) => state.setGridPosts);
+
+  // Get current profile for profile-specific avatar/bio
+  const profiles = useAppStore((state) => state.profiles);
+  const currentProfileId = useAppStore((state) => state.currentProfileId);
+  const updateProfile = useAppStore((state) => state.updateProfile);
+  const currentProfile = profiles.find(p => (p._id || p.id) === currentProfileId);
+
+  // Use profile data if available, otherwise fall back to user data
+  const displayData = {
+    name: currentProfile?.name || user?.name || 'username',
+    username: currentProfile?.username || user?.socialAccounts?.instagram?.username || user?.name || 'username',
+    avatar: currentProfile?.avatar || user?.avatar,
+    avatarPosition: currentProfile?.avatarPosition || user?.avatarPosition || { x: 0, y: 0 },
+    avatarZoom: currentProfile?.avatarZoom || user?.avatarZoom || 1,
+    bio: currentProfile?.bio || user?.bio,
+    brandName: currentProfile?.brandName || currentProfile?.name || user?.brandName || user?.name || 'Your Name',
+    pronouns: currentProfile?.pronouns || user?.pronouns,
+    instagramHighlights: currentProfile?.instagramHighlights || user?.instagramHighlights || [],
+  };
 
   // Group posts into rows
   const rows = [];
@@ -2360,10 +2383,27 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   // Verified badge state
   const [isVerified, setIsVerified] = useState(false);
 
-  // Load highlights and verified status from cloud on mount
+  // Load highlights and verified status from cloud on mount or when profile changes
   useEffect(() => {
     const loadHighlightsFromCloud = async () => {
       try {
+        // First check if profile has highlights
+        if (currentProfile?.instagramHighlights && currentProfile.instagramHighlights.length > 0) {
+          // Map from database format to component format
+          const profileHighlights = currentProfile.instagramHighlights.map(h => ({
+            id: h.highlightId || h.id,
+            name: h.name,
+            cover: h.cover,
+            coverPosition: h.coverPosition || { x: 0, y: 0 },
+            coverZoom: h.coverZoom || 1,
+            stories: h.stories || []
+          }));
+          setHighlights(profileHighlights);
+          setHighlightsLoaded(true);
+          return;
+        }
+
+        // Fall back to user highlights from API
         const response = await api.get('/api/auth/highlights');
         if (response.data.highlights && response.data.highlights.length > 0) {
           // Map from database format to component format
@@ -2390,18 +2430,18 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
       }
     };
     loadHighlightsFromCloud();
-  }, []);
+  }, [currentProfile]);
 
   const fileInputRef = useRef(null);
 
   // Open modal with current avatar (use original if available for non-destructive editing)
   const handleAvatarClick = () => {
-    if (user?.avatar) {
+    if (displayData.avatar) {
       // Always use the original image for editing
-      setTempImage(user.avatar);
+      setTempImage(displayData.avatar);
       // Load existing position if stored
-      setPosition(user.avatarPosition || { x: 0, y: 0 });
-      setZoom(user.avatarZoom || 1);
+      setPosition(displayData.avatarPosition || { x: 0, y: 0 });
+      setZoom(displayData.avatarZoom || 1);
     } else {
       setTempImage(null);
       setPosition({ x: 0, y: 0 });
@@ -2495,6 +2535,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
   };
 
   // Save avatar - non-destructive: upload original image and save position/zoom separately
+  // Saves to current profile if one is selected, otherwise saves to user
   const handleSave = async () => {
     if (!tempImage) {
       setShowAvatarModal(false);
@@ -2526,17 +2567,23 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
         avatarZoom: zoom
       };
 
-      // Update position/zoom on server
-      await api.put('/api/auth/profile', {
-        avatarPosition: position,
-        avatarZoom: zoom
-      });
-
-      // Update local state
-      setUser({
-        ...user,
-        ...avatarData
-      });
+      // If we have a current profile, save to profile instead of user
+      if (currentProfileId && currentProfile) {
+        await api.put(`/api/profile/${currentProfileId}`, avatarData);
+        // Update profile in local state
+        updateProfile(currentProfileId, avatarData);
+        console.log('Avatar saved to profile:', currentProfileId);
+      } else {
+        // Fall back to saving to user
+        await api.put('/api/auth/profile', {
+          avatarPosition: position,
+          avatarZoom: zoom
+        });
+        setUser({
+          ...user,
+          ...avatarData
+        });
+      }
 
       setShowAvatarModal(false);
       setTempImageFile(null);
@@ -2559,23 +2606,37 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
 
   // Open edit profile modal
   const handleEditProfile = () => {
-    setEditBrandName(user?.brandName || '');
-    setEditBio(user?.bio || '');
-    setEditPronouns(user?.pronouns || '');
+    setEditBrandName(displayData.brandName || '');
+    setEditBio(displayData.bio || '');
+    setEditPronouns(displayData.pronouns || '');
     setShowEditProfile(true);
   };
 
   // Save profile changes
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     setIsSaving(true);
 
-    // Update user in store (will be persisted via zustand persist)
-    setUser({
-      ...user,
+    const profileData = {
       brandName: editBrandName,
       bio: editBio,
       pronouns: editPronouns,
-    });
+    };
+
+    try {
+      // If we have a current profile, save to it
+      if (currentProfileId && currentProfile) {
+        await api.put(`/api/profile/${currentProfileId}`, profileData);
+        updateProfile(currentProfileId, profileData);
+      } else {
+        // Fall back to saving to user
+        setUser({
+          ...user,
+          ...profileData,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+    }
 
     setTimeout(() => {
       setIsSaving(false);
@@ -2614,11 +2675,20 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
           stories: h.stories || []
         }));
 
-        await api.put('/api/auth/highlights', {
-          highlights: highlightsToSave,
-          isVerified
-        });
-        console.log('[Highlights] Saved to cloud successfully');
+        // Save to profile if one is selected, otherwise save to user
+        if (currentProfileId) {
+          await api.put(`/api/profile/${currentProfileId}`, {
+            instagramHighlights: highlightsToSave
+          });
+          updateProfile(currentProfileId, { instagramHighlights: highlightsToSave });
+          console.log('[Highlights] Saved to profile successfully');
+        } else {
+          await api.put('/api/auth/highlights', {
+            highlights: highlightsToSave,
+            isVerified
+          });
+          console.log('[Highlights] Saved to user successfully');
+        }
       } catch (err) {
         console.error('Failed to save highlights to cloud:', err);
       }
@@ -2629,7 +2699,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
         clearTimeout(saveHighlightsTimeoutRef.current);
       }
     };
-  }, [highlights, isVerified, highlightsLoaded]);
+  }, [highlights, isVerified, highlightsLoaded, currentProfileId, updateProfile]);
 
   // Highlight handlers
   const highlightDragOccurredRef = useRef(false);
@@ -2865,7 +2935,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-1">
           <span className="text-sm font-semibold text-dark-100">
-            {user?.username || 'username'}
+            {displayData.username}
           </span>
           {isVerified && (
             <svg className="w-3.5 h-3.5" viewBox="0 0 40 40" fill="none">
@@ -2896,10 +2966,10 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
             className="relative w-[86px] h-[86px] rounded-full bg-gradient-to-br from-accent-purple via-accent-pink to-accent-orange p-[3px] group cursor-pointer flex-shrink-0"
           >
             <div className="w-full h-full rounded-full bg-dark-800 overflow-hidden relative">
-              {user?.avatar ? (
+              {displayData.avatar ? (
                 <img
-                  src={user.avatar}
-                  alt={user.brandName || user.name || 'Profile'}
+                  src={displayData.avatar}
+                  alt={displayData.brandName || displayData.name || 'Profile'}
                   className="absolute pointer-events-none"
                   style={{
                     width: '100%',
@@ -2909,7 +2979,7 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
                     top: '50%',
                     transformOrigin: 'center center',
                     // Scale position by ratio of container sizes (86/256 ≈ 0.336)
-                    transform: `translate(-50%, -50%) translate(${(user.avatarPosition?.x || 0) * 0.336}px, ${(user.avatarPosition?.y || 0) * 0.336}px) scale(${getActualZoom(user.avatarZoom || 1)})`,
+                    transform: `translate(-50%, -50%) translate(${(displayData.avatarPosition?.x || 0) * 0.336}px, ${(displayData.avatarPosition?.y || 0) * 0.336}px) scale(${getActualZoom(displayData.avatarZoom || 1)})`,
                   }}
                 />
               ) : (
@@ -2944,13 +3014,13 @@ function GridPreview({ posts, layout, showRowHandles = true, onDeletePost, gridI
         {/* Name, Pronouns & Bio */}
         <div className="mt-3">
           <div className="flex items-center gap-1">
-            <span className="text-sm font-semibold text-dark-100">{user?.brandName || user?.name || 'Your Name'}</span>
-            {user?.pronouns && (
-              <span className="text-dark-500 text-xs">· {user.pronouns}</span>
+            <span className="text-sm font-semibold text-dark-100">{displayData.brandName}</span>
+            {displayData.pronouns && (
+              <span className="text-dark-500 text-xs">· {displayData.pronouns}</span>
             )}
           </div>
-          {user?.bio && (
-            <p className="text-sm text-dark-300 whitespace-pre-line mt-0.5 leading-tight">{user.bio}</p>
+          {displayData.bio && (
+            <p className="text-sm text-dark-300 whitespace-pre-line mt-0.5 leading-tight">{displayData.bio}</p>
           )}
         </div>
 

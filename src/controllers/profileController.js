@@ -38,6 +38,8 @@ exports.getCurrentProfile = async (req, res) => {
       name: user.name,
       avatar: user.avatar,
       bio: user.bio,
+      brandName: user.brandName,
+      pronouns: user.pronouns,
       instagramHighlights: user.instagramHighlights
     });
 
@@ -132,7 +134,7 @@ exports.updateProfile = async (req, res) => {
 
     const allowedUpdates = [
       'name', 'username', 'avatar', 'avatarPosition', 'avatarZoom',
-      'bio', 'platform', 'color', 'isActive', 'instagramHighlights'
+      'bio', 'brandName', 'pronouns', 'platform', 'color', 'isActive', 'instagramHighlights'
     ];
 
     allowedUpdates.forEach(field => {

@@ -40,6 +40,14 @@ const profileSchema = new mongoose.Schema({
     type: String,
     maxlength: 500
   },
+  brandName: {
+    type: String,
+    trim: true
+  },
+  pronouns: {
+    type: String,
+    trim: true
+  },
 
   // Platform this profile is primarily for
   platform: {
@@ -150,6 +158,8 @@ profileSchema.statics.getOrCreateDefault = async function(userId, userData = {})
         username: userData.username || null,
         avatar: userData.avatar || null,
         bio: userData.bio || null,
+        brandName: userData.brandName || null,
+        pronouns: userData.pronouns || null,
         instagramHighlights: userData.instagramHighlights || [],
         isDefault: true,
         isActive: true,

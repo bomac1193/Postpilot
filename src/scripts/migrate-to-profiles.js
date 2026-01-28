@@ -61,6 +61,8 @@ async function createDefaultProfile(user) {
       avatarPosition: user.avatarPosition || { x: 0, y: 0 },
       avatarZoom: user.avatarZoom || 1,
       bio: user.bio || null,
+      brandName: user.brandName || null,
+      pronouns: user.pronouns || null,
       platform: 'both',
       instagramHighlights: user.instagramHighlights || [],
       isDefault: true,

@@ -18,6 +18,7 @@ import {
   Users,
   Sparkles,
   Dna,
+  Zap,
   UserCircle2,
   PenTool,
 } from 'lucide-react';
@@ -79,6 +80,7 @@ const navItems = [
     label: 'Subtaste',
     children: [
       { path: '/genome', icon: Dna, label: 'Taste Genome' },
+      { path: '/training', icon: Zap, label: 'Training' },
       { path: '/studio', icon: Sparkles, label: 'Content Studio' },
     ],
   },

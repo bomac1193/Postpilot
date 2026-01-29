@@ -534,7 +534,7 @@ function ContentStudio() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
           <Sparkles className="w-7 h-7 text-accent-purple" />
-          Subtaste · Flio
+          Subtaste · Folio
         </h1>
         <p className="text-dark-400 mt-1">
           Folio-native console for generation, scoring, and profile signals.

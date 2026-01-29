@@ -73,9 +73,16 @@ const navItems = [
       { path: '/editor/pro', icon: Wand2, label: 'Pro' },
     ],
   },
-  { path: '/studio', icon: Sparkles, label: 'Content Studio' },
+  {
+    id: 'subtaste',
+    icon: Dna,
+    label: 'Subtaste',
+    children: [
+      { path: '/genome', icon: Dna, label: 'Taste Genome' },
+      { path: '/studio', icon: Sparkles, label: 'Content Studio' },
+    ],
+  },
   { path: '/characters', icon: UserCircle2, label: 'Characters' },
-  { path: '/genome', icon: Dna, label: 'Taste Genome' },
   { path: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { path: '/library', icon: FolderOpen, label: 'Media Library' },
   { path: '/profiles', icon: Users, label: 'Profiles' },

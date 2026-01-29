@@ -502,9 +502,11 @@ function ContentStudio() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
           <Sparkles className="w-7 h-7 text-accent-purple" />
-          Content Studio
+          Subtaste · Content Studio (Folio)
         </h1>
-        <p className="text-dark-400 mt-1">AI-powered content generation and scoring based on your taste profile</p>
+        <p className="text-dark-400 mt-1">
+          AI-powered generation and scoring, fused with your Subtaste genome and Folio workspace context.
+        </p>
       </div>
 
       {/* Tabs */}

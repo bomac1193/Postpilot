@@ -15,6 +15,7 @@ import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
 import Characters from './pages/Characters';
 import ContentStudio from './pages/ContentStudio';
+import FolioCollections from './pages/FolioCollections';
 import TasteGenome from './pages/TasteGenome';
 import TasteTraining from './pages/TasteTraining';
 
@@ -67,6 +68,7 @@ function App() {
           <Route path="profiles" element={<Profiles />} />
           <Route path="characters" element={<Characters />} />
           <Route path="studio" element={<ContentStudio />} />
+          <Route path="collections" element={<FolioCollections />} />
           <Route path="genome" element={<TasteGenome />} />
           <Route path="training" element={<TasteTraining />} />
           <Route path="settings" element={<Settings />} />

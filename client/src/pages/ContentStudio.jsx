@@ -292,6 +292,7 @@ function ContentStudio() {
   const [useFolioForGeneration, setUseFolioForGeneration] = useState(true);
   const [folioProfileStats, setFolioProfileStats] = useState(null);
   const [folioCollectionsList, setFolioCollectionsList] = useState([]);
+  const [folioLoadingCollections, setFolioLoadingCollections] = useState(false);
 
   // YouTube generation
   const [youtubeVideoType, setYoutubeVideoType] = useState('standard');
@@ -398,11 +399,14 @@ function ContentStudio() {
 
   const loadFolioCollections = async () => {
     try {
+      setFolioLoadingCollections(true);
       const data = await folioApi.collections.list(20, 0);
       const collections = data.collections || data || [];
       setFolioCollectionsList(collections);
     } catch (error) {
       console.error('Failed to load Folio collections:', error);
+    } finally {
+      setFolioLoadingCollections(false);
     }
   };
 
@@ -987,6 +991,21 @@ function ContentStudio() {
                     ? `Connected as ${folioUser?.name || folioUser?.email}`
                     : 'Connect to Folio for enhanced AI generation'}
                 </p>
+                {folioConnected && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-dark-300">
+                    <span className="px-2 py-1 rounded bg-dark-700 border border-dark-600">
+                      Session active
+                    </span>
+                    <span className="px-2 py-1 rounded bg-dark-700 border border-dark-600">
+                      Collections: {folioCollectionsList?.length ?? 0}{folioLoadingCollections ? '…' : ''}
+                    </span>
+                    {folioProfileStats?.confidence && (
+                      <span className="px-2 py-1 rounded bg-dark-700 border border-dark-600">
+                        Confidence: {folioProfileStats.confidence}%
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {folioConnected && (
                 <button

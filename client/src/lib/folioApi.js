@@ -3,26 +3,24 @@
  * Connects Slayt to Folio's creative intelligence platform
  */
 
-const defaultFolioBase = typeof window !== 'undefined'
-  ? `${window.location.origin.replace(/\/$/, '')}/folio`
-  : 'http://localhost:3002/folio';
+const defaultFolioBase = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/folio`
+  : (typeof window !== 'undefined'
+      ? `${window.location.origin.replace(/\/$/, '')}/folio`
+      : 'http://localhost:3002/folio');
 const FOLIO_API_URL = import.meta.env.VITE_FOLIO_API_URL || defaultFolioBase;
 
-// Store Folio session token
-let folioToken = localStorage.getItem('folio_token') || null;
+// Store Folio session user
 let folioUser = JSON.parse(localStorage.getItem('folio_user') || 'null');
 
 /**
  * Set Folio authentication
  */
-export const setFolioAuth = (token, user) => {
-  folioToken = token;
+export const setFolioAuth = (user) => {
   folioUser = user;
-  if (token) {
-    localStorage.setItem('folio_token', token);
+  if (user) {
     localStorage.setItem('folio_user', JSON.stringify(user));
   } else {
-    localStorage.removeItem('folio_token');
     localStorage.removeItem('folio_user');
   }
 };
@@ -35,33 +33,35 @@ export const getFolioUser = () => folioUser;
 /**
  * Check if connected to Folio
  */
-export const isFolioConnected = () => !!folioToken;
+export const isFolioConnected = () => !!folioUser;
 
 /**
  * Make authenticated request to Folio API
  */
 const folioFetch = async (endpoint, options = {}) => {
-  if (!folioToken) {
-    throw new Error('Not connected to Folio');
-  }
-
   const response = await fetch(`${FOLIO_API_URL}${endpoint}`, {
+    credentials: 'include',
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${folioToken}`,
       ...options.headers,
     },
   });
 
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!response.ok) {
     if (response.status === 401) {
-      // Token expired, clear auth
-      setFolioAuth(null, null);
+      setFolioAuth(null);
       throw new Error('Folio session expired');
     }
-    const error = await response.json().catch(() => ({}));
+    const error = isJson ? await response.json().catch(() => ({})) : { message: await response.text().catch(() => '') };
     throw new Error(error.message || `Folio API error: ${response.status}`);
+  }
+
+  if (!isJson) {
+    return { raw: await response.text() };
   }
 
   return response.json();
@@ -75,26 +75,48 @@ export const folioAuth = {
    * Login to Folio
    */
   async login(email, password) {
-    const response = await fetch(`${FOLIO_API_URL}/api/auth/callback/credentials`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+    // Fetch CSRF token first
+    const csrfRes = await fetch(`${FOLIO_API_URL}/api/auth/csrf`, {
+      credentials: 'include',
     });
-
-    if (!response.ok) {
-      throw new Error('Invalid credentials');
+    if (!csrfRes.ok) {
+      throw new Error('Unable to start Folio auth');
     }
+    const { csrfToken } = await csrfRes.json();
 
-    const data = await response.json();
-    setFolioAuth(data.token, data.user);
-    return data;
+    const body = new URLSearchParams();
+    body.append('csrfToken', csrfToken);
+    body.append('email', email);
+    body.append('password', password);
+    body.append('json', 'true');
+
+   const response = await fetch(`${FOLIO_API_URL}/api/auth/callback/credentials`, {
+     method: 'POST',
+     credentials: 'include',
+     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+     body,
+   });
+
+   if (!response.ok) {
+     const text = await response.text().catch(() => '');
+     throw new Error(text || 'Invalid credentials');
+   }
+
+    // Session cookie is now set; fetch session to get user
+    const session = await this.getSession();
+    if (!session?.user) {
+      // Sometimes NextAuth returns HTML on failure; surface minimal message
+      const text = await response.text().catch(() => '');
+      throw new Error(text || 'Unable to establish Folio session');
+    }
+    setFolioAuth(session.user);
+    return { user: session.user };
   },
 
   /**
    * Check current session
    */
   async getSession() {
-    if (!folioToken) return null;
     try {
       const data = await folioFetch('/api/auth/session');
       return data;
@@ -107,7 +129,7 @@ export const folioAuth = {
    * Logout from Folio
    */
   logout() {
-    setFolioAuth(null, null);
+    setFolioAuth(null);
   },
 
   /**

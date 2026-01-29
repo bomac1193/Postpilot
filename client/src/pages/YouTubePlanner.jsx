@@ -77,7 +77,7 @@ function YouTubePlanner() {
   const [editingVideoId, setEditingVideoId] = useState(null);
 
   // Loading and error states for cloud sync
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -163,19 +163,6 @@ function YouTubePlanner() {
   useEffect(() => {
     fetchCollections();
   }, []);
-
-  // Safety: never let the loading overlay persist forever
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 3000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // If collections already in store, clear loading immediately
-  useEffect(() => {
-    if (youtubeCollections?.length) {
-      setLoading(false);
-    }
-  }, [youtubeCollections]);
 
   // Load videos when collection changes
   useEffect(() => {
@@ -554,35 +541,46 @@ function YouTubePlanner() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Non-blocking status badges */}
+      {/* Drop Overlay */}
       {isDraggingFiles && (
-        <div className="absolute top-4 right-4 z-40 px-3 py-2 rounded-lg bg-dark-800 border border-red-500/60 text-sm text-dark-100 flex items-center gap-2 shadow-lg pointer-events-none">
-          <ImagePlus className="w-4 h-4 text-red-400" />
-          <span>Drop thumbnails to add to {currentCollection.name}</span>
+        <div className="absolute inset-0 z-50 bg-dark-900/90 backdrop-blur-sm flex items-center justify-center rounded-2xl border-2 border-dashed border-red-500">
+          <div className="text-center">
+            <ImagePlus className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <p className="text-xl font-semibold text-dark-100 mb-2">Drop thumbnails here</p>
+            <p className="text-dark-400">
+              Adding to <span className="text-red-400 font-medium">{currentCollection.name}</span>
+            </p>
+          </div>
         </div>
       )}
 
+      {/* Upload Progress Overlay */}
       {uploading && (
-        <div className="absolute top-4 right-4 z-40 px-3 py-2 rounded-lg bg-dark-800 border border-dark-600 text-sm text-dark-100 flex items-center gap-2 shadow-lg">
-          <Loader2 className="w-4 h-4 text-red-400 animate-spin" />
-          <span>
-            Uploading {uploadProgress.current} of {uploadProgress.total} → {currentCollection.name}
-          </span>
+        <div className="absolute inset-0 z-50 bg-dark-900/90 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 text-red-500 mx-auto mb-4 animate-spin" />
+            <p className="text-lg font-semibold text-dark-100 mb-2">
+              Uploading {uploadProgress.current} of {uploadProgress.total}
+            </p>
+            <p className="text-sm text-dark-400 mb-3">
+              to <span className="text-red-400">{currentCollection.name}</span>
+            </p>
+            <div className="w-64 h-2 bg-dark-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-red-500 transition-all duration-300"
+                style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Loading Inline Banner (non-blocking) */}
+      {/* Loading Overlay */}
       {loading && (
-        <div className="absolute top-4 left-4 right-4 z-30">
-          <div className="bg-dark-800/90 border border-dark-700 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg">
-            <Loader2 className="w-5 h-5 text-red-500 animate-spin" />
-            <span className="text-sm text-dark-100">Loading collections from cloud...</span>
-            <button
-              onClick={() => setLoading(false)}
-              className="ml-auto text-xs text-dark-400 hover:text-dark-100"
-            >
-              Hide
-            </button>
+        <div className="absolute inset-0 z-40 bg-dark-900/80 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+          <div className="text-center">
+            <Loader2 className="w-10 h-10 text-red-500 mx-auto mb-3 animate-spin" />
+            <p className="text-dark-200">Loading collections from cloud...</p>
           </div>
         </div>
       )}

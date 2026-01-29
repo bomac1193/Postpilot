@@ -57,6 +57,7 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
   const [generating, setGenerating] = useState(false);
   const [aiVariants, setAiVariants] = useState([]);
   const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [tasteProfile, setTasteProfile] = useState(null);
 
   const fileInputRef = useRef(null);
   const autosaveTimer = useRef(null);
@@ -104,6 +105,19 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
       }
     };
   }, [title, description, video?.id]);
+
+  // Load taste profile for richer prompts
+  useEffect(() => {
+    const loadTaste = async () => {
+      try {
+        const res = await intelligenceApi.getProfile(currentProfileId || null);
+        if (res?.tasteProfile) setTasteProfile(res.tasteProfile);
+      } catch (err) {
+        console.error('Failed to load taste profile for YouTube dice:', err);
+      }
+    };
+    loadTaste();
+  }, [currentProfileId]);
 
   // Final flush on unmount
   useEffect(() => () => {
@@ -229,14 +243,24 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
   const buildTastePrompt = () => {
     const baseTitle = title || video?.title || 'untitled video';
     const desc = description || video?.description || '';
-    if (desc) {
-      return `${baseTitle} — ${desc}`;
-    }
-    return baseTitle;
+    const glyph = tasteProfile?.glyph ? `Glyph ${tasteProfile.glyph}` : null;
+    const tones = tasteProfile?.aestheticPatterns?.dominantTones?.slice(0, 3) || [];
+    const hooks = tasteProfile?.performancePatterns?.hooks?.slice(0, 2) || [];
+
+    const styleBits = [
+      glyph && `style: ${glyph}`,
+      hooks.length ? `hooks: ${hooks.join(', ')}` : null,
+      tones.length ? `tones: ${tones.join(', ')}` : null,
+      'avoid generic intros; lead with a sharp, specific hook',
+      'keep description concise but vivid; no fluff',
+    ].filter(Boolean).join(' · ');
+
+    const base = desc ? `${baseTitle} — ${desc}` : baseTitle;
+    return `${base} || ${styleBits}`;
   };
 
   // AI Generation
-  const handleGenerateAI = async (topicOverride = null) => {
+  const handleGenerateAI = async (topicOverride = null, highSignal = false) => {
     const topic =
       topicOverride ??
       (aiTopic.trim() || title || description || 'taste-aligned ideas');
@@ -245,10 +269,24 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
     try {
       const result = await intelligenceApi.generateYouTube(topic, {
         videoType: aiVideoType,
-        count: 5,
+        count: highSignal ? 7 : 5,
         profileId: currentProfileId || undefined,
         folioId: activeFolioId || undefined,
         projectId: activeProjectId || undefined,
+        tasteContext: tasteProfile ? {
+          glyph: tasteProfile.glyph,
+          tones: tasteProfile?.aestheticPatterns?.dominantTones,
+          hooks: tasteProfile?.performancePatterns?.hooks,
+          confidence: tasteProfile?.confidence,
+        } : undefined,
+        directives: highSignal
+          ? [
+              'Avoid generic YouTube intros',
+              'Lead with a specific, high-signal hook',
+              'Match glyph/archetype voice; keep titles tight',
+              'Descriptions should be vivid, concise, and reflect saved collections taste',
+            ]
+          : undefined,
       });
       const variants = result.variants || [];
       setAiVariants(variants);
@@ -323,7 +361,7 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
               setShowAIPanel(true);
               const prompt = buildTastePrompt();
               if (!generating) {
-                handleGenerateAI(prompt);
+                handleGenerateAI(prompt, true);
               }
             }}
             disabled={generating}

@@ -116,6 +116,7 @@ function PostDetails({ post }) {
   const [selectedPlatforms, setSelectedPlatforms] = useState(['instagram']);
   const [scheduling, setScheduling] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [tasteProfile, setTasteProfile] = useState(null);
 
   // Quick Edit state
   const [isQuickEditing, setIsQuickEditing] = useState(false);
@@ -177,6 +178,19 @@ function PostDetails({ post }) {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
+
+  // Load taste profile once for dice rolls
+  useEffect(() => {
+    const loadTaste = async () => {
+      try {
+        const res = await intelligenceApi.getProfile(currentProfileId || null);
+        if (res?.tasteProfile) setTasteProfile(res.tasteProfile);
+      } catch (err) {
+        console.error('Failed to load taste profile for grid dice:', err);
+      }
+    };
+    loadTaste();
+  }, [currentProfileId]);
 
   // Calculate actual image bounds within container (for object-contain)
   const calculateImageBounds = () => {
@@ -317,13 +331,40 @@ function PostDetails({ post }) {
   const handleTasteRoll = async () => {
     setGeneratingCaption(true);
     try {
-      const topic = caption || post?.title || 'taste-aligned social post';
+      const baseTopic = caption || post?.title || 'taste-aligned social post';
+      const glyph = tasteProfile?.glyph ? `Glyph ${tasteProfile.glyph}` : null;
+      const tones = tasteProfile?.aestheticPatterns?.dominantTones?.slice(0, 3) || [];
+      const hooks = tasteProfile?.performancePatterns?.hooks?.slice(0, 2) || [];
+      const tags = hashtags ? hashtags.split(/\s+/).filter(Boolean).join(', ') : '';
+
+      const topic = [
+        baseTopic,
+        glyph && `style: ${glyph}`,
+        hooks.length ? `hooks: ${hooks.join(', ')}` : null,
+        tones.length ? `tones: ${tones.join(', ')}` : null,
+        tags && `hashtags: ${tags}`,
+        'avoid generic intros; give 3 sharp, specific options; keep to 2 sentences max',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
       const { variants = [] } = await intelligenceApi.generate(topic, {
         platform: selectedPlatforms[0] || 'instagram',
-        count: 3,
+        count: 4,
         profileId: currentProfileId || undefined,
         folioId: activeFolioId || undefined,
         projectId: activeProjectId || undefined,
+        tasteContext: tasteProfile ? {
+          glyph: tasteProfile.glyph,
+          tones: tasteProfile?.aestheticPatterns?.dominantTones,
+          hooks: tasteProfile?.performancePatterns?.hooks,
+          confidence: tasteProfile?.confidence,
+        } : undefined,
+        directives: [
+          'No fluff, no generic “new post” language',
+          'Lead with the hook, not context',
+          'Stay within platform tone and glyph voice',
+        ],
       });
       const pick = variants[0];
       if (pick) {

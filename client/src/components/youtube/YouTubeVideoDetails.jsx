@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores/useAppStore';
-import { intelligenceApi, youtubeApi } from '../../lib/api';
+import { intelligenceApi, youtubeApi, genomeApi } from '../../lib/api';
 import {
   Image,
   Type,
@@ -19,6 +19,8 @@ import {
   Star,
   Check,
   Dice5,
+  ThumbsDown,
+  SkipForward,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -54,6 +56,7 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
   const [aiVideoType, setAiVideoType] = useState('standard');
   const [generating, setGenerating] = useState(false);
   const [aiVariants, setAiVariants] = useState([]);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
 
   const fileInputRef = useRef(null);
   const autosaveTimer = useRef(null);
@@ -169,6 +172,29 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
   const handleDescriptionBlur = () => {
     persistVideoUpdates({ description });
     lastSavedRef.current = { ...lastSavedRef.current, description };
+  };
+
+  // Taste feedback signals (dislike/skip)
+  const sendTasteSignal = async (type, reason) => {
+    if (!videoId) return;
+    setSendingFeedback(true);
+    try {
+      await genomeApi.signal(
+        type,
+        `youtube_${reason}`,
+        {
+          platform: 'youtube',
+          videoId,
+          title: title || video.title || '',
+          description: description || video.description || '',
+        },
+        currentProfileId || null
+      );
+    } catch (err) {
+      console.error('Failed to send taste signal:', err);
+    } finally {
+      setSendingFeedback(false);
+    }
   };
 
   const handleStatusChange = (newStatus) => {
@@ -390,6 +416,31 @@ function YouTubeVideoDetails({ video, onThumbnailUpload }) {
             placeholder="Add a description (optional)..."
             className="input w-full min-h-[80px] resize-none"
           />
+        </div>
+
+        {/* Taste Feedback */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-dark-400">Feedback to Taste Genome:</span>
+          <button
+            type="button"
+            onClick={() => sendTasteSignal('dislike', 'dislike')}
+            disabled={sendingFeedback}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-dark-700 hover:bg-dark-600 text-xs text-white disabled:opacity-50"
+            title="Dislike this suggestion"
+          >
+            <ThumbsDown className="w-3.5 h-3.5" />
+            Dislike
+          </button>
+          <button
+            type="button"
+            onClick={() => sendTasteSignal('skip', 'skip')}
+            disabled={sendingFeedback}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-dark-700 hover:bg-dark-600 text-xs text-white disabled:opacity-50"
+            title="Skip this video"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
+            Skip
+          </button>
         </div>
 
         {/* AI Generation */}

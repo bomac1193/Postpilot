@@ -260,7 +260,7 @@ function VariantCard({ variant, index, onCopy, copied, onRate, platform }) {
 }
 
 function ContentStudio() {
-  const [activeTab, setActiveTab] = useState('generate');
+  const [activeTab, setActiveTab] = useState('folio');
   const [topic, setTopic] = useState('');
   const [platform, setPlatform] = useState('instagram');
   const [generating, setGenerating] = useState(false);
@@ -288,7 +288,9 @@ function ContentStudio() {
   const [folioLoggingIn, setFolioLoggingIn] = useState(false);
   const [folioError, setFolioError] = useState('');
   const [folioTasteProfile, setFolioTasteProfile] = useState(null);
-  const [useFolioForGeneration, setUseFolioForGeneration] = useState(false);
+  const [useFolioForGeneration, setUseFolioForGeneration] = useState(true);
+  const [folioProfileStats, setFolioProfileStats] = useState(null);
+  const [folioCollectionsList, setFolioCollectionsList] = useState([]);
 
   // YouTube generation
   const [youtubeVideoType, setYoutubeVideoType] = useState('standard');
@@ -303,9 +305,16 @@ function ContentStudio() {
     checkFolioConnection();
   }, []);
 
+  useEffect(() => {
+    if (folioConnected) {
+      loadFolioProfile();
+      loadFolioCollections();
+    }
+  }, [folioConnected]);
+
   const loadTasteProfile = async () => {
     try {
-      const result = await intelligenceApi.getProfile();
+      const result = await intelligenceApi.getProfile(currentProfileId || null);
       if (result.hasProfile) {
         setTasteProfile(result.tasteProfile);
       }
@@ -322,8 +331,8 @@ function ContentStudio() {
       try {
         const session = await folioAuth.getSession();
         if (session) {
-          const profile = await folioApi.tasteProfile.get();
-          setFolioTasteProfile(profile);
+          await loadFolioProfile();
+          await loadFolioCollections();
         }
       } catch (error) {
         console.error('Failed to load Folio profile:', error);
@@ -342,12 +351,8 @@ function ContentStudio() {
       setFolioEmail('');
       setFolioPassword('');
       // Load Folio taste profile
-      try {
-        const profile = await folioApi.tasteProfile.get();
-        setFolioTasteProfile(profile);
-      } catch (err) {
-        console.error('Failed to load Folio profile:', err);
-      }
+      await loadFolioProfile();
+      await loadFolioCollections();
     } catch (error) {
       setFolioError(error.message || 'Failed to connect to Folio');
     } finally {
@@ -361,6 +366,33 @@ function ContentStudio() {
     setFolioUser(null);
     setFolioTasteProfile(null);
     setUseFolioForGeneration(false);
+    setFolioProfileStats(null);
+    setFolioCollectionsList([]);
+  };
+
+  const loadFolioProfile = async () => {
+    try {
+      const profile = await folioApi.tasteProfile.get();
+      setFolioTasteProfile(profile);
+      const { confidence, dominantTones, preferredHooks } = profile || {};
+      setFolioProfileStats({
+        confidence: Math.round((confidence || 0) * 100),
+        tones: (dominantTones || []).slice(0, 3),
+        hooks: (preferredHooks || []).slice(0, 3),
+      });
+    } catch (error) {
+      console.error('Failed to load Folio profile:', error);
+    }
+  };
+
+  const loadFolioCollections = async () => {
+    try {
+      const data = await folioApi.collections.list(20, 0);
+      const collections = data.collections || data || [];
+      setFolioCollectionsList(collections);
+    } catch (error) {
+      console.error('Failed to load Folio collections:', error);
+    }
   };
 
   // Handle rating a generated variant
@@ -505,12 +537,32 @@ function ContentStudio() {
           Subtaste · Content Studio (Folio)
         </h1>
         <p className="text-dark-400 mt-1">
-          AI-powered generation and scoring, fused with your Subtaste genome and Folio workspace context.
+          Folio-native console for generation, scoring, and profile signals.
         </p>
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Folio session</p>
+            <p className="text-sm text-white font-semibold mt-1">
+              {folioConnected ? `Connected as ${folioUser?.email || 'user'}` : 'Not connected'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Confidence</p>
+            <p className="text-sm text-white font-semibold mt-1">
+              {folioProfileStats?.confidence ? `${folioProfileStats.confidence}%` : '—'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Collections</p>
+            <p className="text-sm text-white font-semibold mt-1">
+              {folioCollectionsList?.length ?? 0} saved sets
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-dark-800 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-dark-900 rounded-lg p-1 w-fit border border-dark-700">
         {[
           { id: 'generate', label: 'Generate', icon: Sparkles },
           { id: 'youtube', label: 'YouTube', icon: Youtube },

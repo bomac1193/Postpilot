@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronDown, Trash2, Edit3, Check, X, GripVertical, Folder, Search, Tag, Palette, Youtube, Instagram, LayoutGrid, Film, Loader2, Calendar, Flag, Target, Clock, Sparkles } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, ChevronDown, Trash2, Edit3, Check, X, GripVertical, Folder, Search, Tag, Palette, Youtube, Instagram, LayoutGrid, Film, Loader2, Calendar, Flag, Target, Sparkles } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
-import { gridApi, reelCollectionApi, rolloutApi } from '../lib/api';
+import { gridApi, reelCollectionApi, rolloutApi, genomeApi } from '../lib/api';
 
 // TikTok icon component
 function TikTokIcon({ className }) {
@@ -222,6 +222,9 @@ function RolloutPlanner() {
   const currentRolloutId = useAppStore((state) => state.currentRolloutId);
   const youtubeCollections = useAppStore((state) => state.youtubeCollections);
   const setCurrentRollout = useAppStore((state) => state.setCurrentRollout);
+  const currentProfileId = useAppStore((state) => state.currentProfileId);
+  const activeFolioId = useAppStore((state) => state.activeFolioId);
+  const activeProjectId = useAppStore((state) => state.activeProjectId);
 
   // Find current rollout - support both backend _id and local id
   const currentRollout = rollouts.find((r) => (r._id || r.id) === currentRolloutId) || null;
@@ -240,6 +243,7 @@ function RolloutPlanner() {
   const [editedName, setEditedName] = useState('');
   const [pickerSectionId, setPickerSectionId] = useState(null);
   const [draggedSectionIndex, setDraggedSectionIndex] = useState(null);
+  const [activeTab, setActiveTab] = useState('schedule'); // 'schedule' | 'templates'
 
   // Backend grids (IG/TikTok)
   const [grids, setGrids] = useState([]);
@@ -400,6 +404,8 @@ function RolloutPlanner() {
       // Create rollout
       const created = await rolloutApi.create({ name: template.name, status: 'draft', description: template.description, tag: template.tag });
       let newRollout = { ...created.rollout, id: created.rollout?._id || created.rollout?.id };
+      newRollout.templateId = template.id;
+      newRollout.templateName = template.name;
       // Add sections sequentially
       for (let i = 0; i < template.phases.length; i++) {
         const phase = template.phases[i];
@@ -410,6 +416,17 @@ function RolloutPlanner() {
           notes: phase.notes,
         });
         newRollout = { ...res.rollout, id: res.rollout?._id || res.rollout?.id };
+      }
+      // Log taste signal (optional, non-blocking)
+      try {
+        await genomeApi.signal(
+          'choice',
+          'rollout_template',
+          { templateId: template.id, templateName: template.name, folioId: activeFolioId || undefined, projectId: activeProjectId || undefined },
+          currentProfileId || null
+        );
+      } catch (err) {
+        console.warn('Failed to log template taste signal:', err);
       }
       // Refresh rollouts list by fetching or injecting
       const fetched = await rolloutApi.getAll();
@@ -422,7 +439,7 @@ function RolloutPlanner() {
     } finally {
       setTemplateApplying(null);
     }
-  }, [setRollouts, setCurrentRollout]);
+  }, [setRollouts, setCurrentRollout, activeFolioId, activeProjectId, currentProfileId]);
 
   const handleStartEditName = () => {
     if (!currentRollout) return;
@@ -580,6 +597,13 @@ function RolloutPlanner() {
     ? currentRollout?.sections?.find((s) => s.id === pickerSectionId)?.collectionIds || []
     : [];
 
+  const recommendedTemplate = useMemo(() => {
+    if (currentRollout?.templateId) {
+      return ROLLOUT_TEMPLATES.find((tpl) => tpl.id === currentRollout.templateId) || null;
+    }
+    return ROLLOUT_TEMPLATES.find((tpl) => tpl.tag === 'Core') || ROLLOUT_TEMPLATES[0];
+  }, [currentRollout]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -591,7 +615,7 @@ function RolloutPlanner() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         {/* Dropdown Selector */}
         <div className="relative">
           <button
@@ -737,141 +761,188 @@ function RolloutPlanner() {
         )}
       </div>
 
-      {/* Rollout Templates */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="w-5 h-5 text-accent-purple" />
-          <h2 className="text-lg font-semibold text-white">Rollout Templates</h2>
-          <span className="text-xs text-dark-500">Core blueprints + inspired overlays</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {ROLLOUT_TEMPLATES.map((tpl) => (
-            <div key={tpl.id} className="border border-dark-700 bg-dark-900 rounded-lg p-4 flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">{tpl.name}</p>
-                  <p className="text-xs text-dark-400">{tpl.description}</p>
-                </div>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full border ${tpl.tag === 'Inspired' ? 'border-pink-500/50 text-pink-300' : 'border-accent-purple/50 text-accent-purple'}`}>
-                  {tpl.tag}
-                </span>
-              </div>
-              <div className="text-xs text-dark-400">
-                {tpl.phases.map(p => p.name).join(' · ')}
-              </div>
-              <button
-                onClick={() => handleApplyTemplate(tpl)}
-                disabled={!!templateApplying}
-                className="mt-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-dark-600 text-sm text-white hover:border-accent-purple disabled:opacity-50"
-              >
-                {templateApplying === tpl.id ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Applying...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Apply Template
-                  </>
-                )}
-              </button>
-            </div>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div className="flex items-center gap-2">
+        {[
+          { id: 'schedule', label: 'Schedule' },
+          { id: 'templates', label: 'Templates' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
+              activeTab === tab.id ? 'bg-accent-purple text-white' : 'text-dark-400 hover:text-white bg-dark-800 border border-dark-700'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Rollout Scheduling Panel */}
-      {currentRollout && (
-        <RolloutSchedulingPanel
-          rollout={currentRollout}
-          onSchedule={async (scheduleData) => {
-            try {
-              setSavingRollout(true);
-              const data = await rolloutApi.scheduleRollout(currentRolloutId, scheduleData);
-              setRollouts(rollouts.map(r =>
-                (r._id || r.id) === currentRolloutId
-                  ? { ...data.rollout, id: data.rollout._id }
-                  : r
-              ));
-            } catch (err) {
-              console.error('Failed to schedule rollout:', err);
-              alert('Failed to schedule rollout');
-            } finally {
-              setSavingRollout(false);
-            }
-          }}
-          saving={savingRollout}
-        />
-      )}
-
-      {/* Content */}
-      {!currentRollout ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <div className="text-center max-w-md">
-            <h2 className="text-xl font-display text-white mb-2">No Rollout Selected</h2>
-            <p className="text-dark-400 mb-6">
-              Select an existing rollout or create a new one to get started.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setDropdownOpen(true);
-                setIsCreating(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-purple/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Create Rollout
-            </button>
+      {/* Templates Tab */}
+      {activeTab === 'templates' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-accent-purple" />
+            <h2 className="text-lg font-semibold text-white">Rollout Templates</h2>
+            <span className="text-xs text-dark-500">Core blueprints + inspired overlays</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {ROLLOUT_TEMPLATES.map((tpl) => (
+              <div key={tpl.id} className="border border-dark-700 bg-dark-900 rounded-lg p-4 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{tpl.name}</p>
+                    <p className="text-xs text-dark-400">{tpl.description}</p>
+                  </div>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full border ${tpl.tag === 'Inspired' ? 'border-pink-500/50 text-pink-300' : 'border-accent-purple/50 text-accent-purple'}`}>
+                    {tpl.tag}
+                  </span>
+                </div>
+                <div className="text-xs text-dark-400">
+                  {tpl.phases.map(p => p.name).join(' · ')}
+                </div>
+                <button
+                  onClick={() => handleApplyTemplate(tpl)}
+                  disabled={!!templateApplying}
+                  className="mt-2 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md border border-dark-600 text-sm text-white hover:border-accent-purple disabled:opacity-50"
+                >
+                  {templateApplying === tpl.id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Applying...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Apply Template
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Sections */}
-          {currentRollout.sections
-            .sort((a, b) => a.order - b.order)
-            .map((section, index) => (
-              <RolloutSection
-                key={section.id}
-                section={section}
-                index={index}
-                rolloutId={currentRolloutId}
-                collections={section.collectionIds.map(getCollectionById).filter(Boolean)}
-                onOpenPicker={() => setPickerSectionId(section.id)}
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={handleDragEnd}
-                isDragging={draggedSectionIndex === index}
-                onUpdateSection={handleUpdateSection}
-                onDeleteSection={handleDeleteSection}
-                onRemoveCollection={handleRemoveCollectionFromSection}
-                onSetDeadline={async (sectionId, deadlineData) => {
-                  try {
-                    const data = await rolloutApi.setSectionDeadline(currentRolloutId, sectionId, deadlineData);
-                    setRollouts(rollouts.map(r =>
-                      (r._id || r.id) === currentRolloutId
-                        ? { ...data.rollout, id: data.rollout._id }
-                        : r
-                    ));
-                  } catch (err) {
-                    console.error('Failed to set section deadline:', err);
-                    alert('Failed to set section deadline');
-                  }
-                }}
-              />
-            ))}
+      )}
 
-          {/* Add Section Button */}
-          <button
-            type="button"
-            onClick={handleAddSection}
-            className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-dark-700 rounded-xl text-dark-400 hover:border-accent-purple hover:text-accent-purple transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Section</span>
-          </button>
-        </div>
+      {/* Schedule Tab */}
+      {activeTab === 'schedule' && (
+        <>
+          <div className="flex flex-col gap-1 text-sm text-dark-200">
+            {currentRollout?.templateName && (
+              <div className="flex items-center gap-2 text-xs text-dark-300">
+                <Sparkles className="w-4 h-4 text-accent-purple" />
+                <span>Applied template: {currentRollout.templateName}</span>
+              </div>
+            )}
+            {recommendedTemplate && (
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-accent-purple" />
+                <div className="flex flex-col">
+                  <span className="font-semibold text-white">
+                    Recommended template: {recommendedTemplate.name}
+                  </span>
+                  <span className="text-xs text-dark-400">
+                    {recommendedTemplate.description}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Rollout Scheduling Panel */}
+          {currentRollout && (
+            <RolloutSchedulingPanel
+              rollout={currentRollout}
+              onSchedule={async (scheduleData) => {
+                try {
+                  setSavingRollout(true);
+                  const data = await rolloutApi.scheduleRollout(currentRolloutId, scheduleData);
+                  setRollouts(rollouts.map(r =>
+                    (r._id || r.id) === currentRolloutId
+                      ? { ...data.rollout, id: data.rollout._id }
+                      : r
+                  ));
+                } catch (err) {
+                  console.error('Failed to schedule rollout:', err);
+                  alert('Failed to schedule rollout');
+                } finally {
+                  setSavingRollout(false);
+                }
+              }}
+              saving={savingRollout}
+            />
+          )}
+
+          {/* Content */}
+          {!currentRollout ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="text-center max-w-md">
+                <h2 className="text-xl font-display text-white mb-2">No Rollout Selected</h2>
+                <p className="text-dark-400 mb-6">
+                  Select an existing rollout or create a new one to get started.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(true);
+                    setIsCreating(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-accent-purple text-white rounded-lg hover:bg-accent-purple/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Rollout
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Sections */}
+              {currentRollout.sections
+                .sort((a, b) => a.order - b.order)
+                .map((section, index) => (
+                  <RolloutSection
+                    key={section.id}
+                    section={section}
+                    index={index}
+                    rolloutId={currentRolloutId}
+                    collections={section.collectionIds.map(getCollectionById).filter(Boolean)}
+                    onOpenPicker={() => setPickerSectionId(section.id)}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragEnd={handleDragEnd}
+                    isDragging={draggedSectionIndex === index}
+                    onUpdateSection={handleUpdateSection}
+                    onDeleteSection={handleDeleteSection}
+                    onRemoveCollection={handleRemoveCollectionFromSection}
+                    onSetDeadline={async (sectionId, deadlineData) => {
+                      try {
+                        const data = await rolloutApi.setSectionDeadline(currentRolloutId, sectionId, deadlineData);
+                        setRollouts(rollouts.map(r =>
+                          (r._id || r.id) === currentRolloutId
+                            ? { ...data.rollout, id: data.rollout._id }
+                            : r
+                        ));
+                      } catch (err) {
+                        console.error('Failed to set section deadline:', err);
+                        alert('Failed to set section deadline');
+                      }
+                    }}
+                  />
+                ))}
+
+              {/* Add Section Button */}
+              <button
+                type="button"
+                onClick={handleAddSection}
+                className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed border-dark-700 rounded-xl text-dark-400 hover:border-accent-purple hover:text-accent-purple transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Section</span>
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Collection Picker Modal */}

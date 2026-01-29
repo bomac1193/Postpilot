@@ -494,7 +494,16 @@ router.get('/ratings', auth, async (req, res) => {
  */
 router.post('/generate-youtube', auth, async (req, res) => {
   try {
-    const { topic, videoType, count, language, profileId, characterId } = req.body;
+    const {
+      topic,
+      videoType,
+      count,
+      language,
+      profileId,
+      characterId,
+      tasteContext,
+      directives = [],
+    } = req.body;
 
     if (!topic) {
       return res.status(400).json({ error: 'Topic required' });
@@ -536,6 +545,8 @@ ${character.samplePosts?.length > 0 ? `Sample style: "${character.samplePosts[0]
       videoType: videoType || 'standard',
       count: count || 5,
       language: language || 'en',
+      tasteContext,
+      directives,
     });
 
     res.json({

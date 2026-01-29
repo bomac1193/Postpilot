@@ -722,17 +722,32 @@ function updateTasteFromRating(currentProfile, content, rating, feedback = {}) {
  * Generate YouTube-specific content (titles, descriptions, tags)
  */
 async function generateYouTubeContent(topic, tasteProfile, options = {}) {
-  const { videoType = 'standard', count = 5, language = 'en' } = options;
+  const {
+    videoType = 'standard',
+    count = 5,
+    language = 'en',
+    directives = [],
+    tasteContext = null,
+  } = options;
+
+  // Build taste context from profile + explicit inputs
+  const tasteContextString = [
+    buildTasteContext(tasteProfile),
+    tasteContext
+      ? `\nEXPLICIT TASTE INPUTS:\n${typeof tasteContext === 'string'
+          ? tasteContext
+          : Object.entries(tasteContext)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+              .join('\n')}`
+      : ''
+  ].filter(Boolean).join('\n');
 
   if (!anthropic) {
     return {
-      variants: generateFallbackYouTubeContent(topic, count),
+      variants: generateFallbackYouTubeContent(topic, count, tasteProfile, directives, tasteContext),
       message: 'Using template-based generation (API not configured)'
     };
   }
-
-  // Build taste context from profile
-  const tasteContext = buildTasteContext(tasteProfile);
 
   // Video type specific guidance
   const typeGuidance = {
@@ -744,6 +759,10 @@ async function generateYouTubeContent(topic, tasteProfile, options = {}) {
   };
 
   try {
+    const directiveText = directives && directives.length
+      ? `\nCUSTOM DIRECTIVES:\n- ${directives.join('\n- ')}\n`
+      : '';
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2048,
@@ -752,7 +771,9 @@ async function generateYouTubeContent(topic, tasteProfile, options = {}) {
         content: `You are a YouTube content strategist helping a creator optimize their video metadata.
 
 CREATOR'S TASTE PROFILE:
-${tasteContext}
+${tasteContextString}
+
+${directiveText}
 
 TASK: Generate ${count} complete YouTube video packages for this topic: "${topic}"
 
@@ -792,13 +813,13 @@ Return ONLY valid JSON array:
     }
 
     return {
-      variants: generateFallbackYouTubeContent(topic, count),
+      variants: generateFallbackYouTubeContent(topic, count, tasteProfile, directives, tasteContext),
       message: 'Using template-based generation'
     };
   } catch (error) {
     console.error('[Intelligence] YouTube generation error:', error.message);
     return {
-      variants: generateFallbackYouTubeContent(topic, count),
+      variants: generateFallbackYouTubeContent(topic, count, tasteProfile, directives, tasteContext),
       message: 'Using template-based generation (API error)'
     };
   }
@@ -806,69 +827,74 @@ Return ONLY valid JSON array:
 
 /**
  * Fallback YouTube content generation without API
- * Creates contextually aware YouTube content based on topic analysis
+ * Creates contextually aware YouTube content based on topic analysis + taste cues
  */
-function generateFallbackYouTubeContent(topic, count) {
+function generateFallbackYouTubeContent(topic, count, tasteProfile, directives = [], extraContext = null) {
   const words = topic.split(/\s+/);
-  const shortTopic = words.slice(0, 4).join(' ');
+  const shortTopic = words.slice(0, 6).join(' ');
   const keyWord = words[0] || topic;
+
+  const glyph = tasteProfile?.glyph;
+  const tones = tasteProfile?.aestheticPatterns?.dominantTones || [];
+  const hooks = tasteProfile?.performancePatterns?.hooks || [];
+  const styleLine = [
+    glyph ? `Glyph ${glyph}` : null,
+    hooks.length ? `hooks: ${hooks.slice(0, 3).join(', ')}` : null,
+    tones.length ? `tones: ${tones.slice(0, 3).join(', ')}` : null,
+    extraContext && typeof extraContext === 'object'
+      ? Object.values(extraContext).flat().slice(0, 3).join(', ')
+      : null,
+  ].filter(Boolean).join(' · ');
+
+  const directiveLine = directives.length
+    ? directives.slice(0, 3).join(' | ')
+    : 'lead with a sharp hook; avoid fluff; keep it brutalist and specific';
 
   const variants = [
     {
-      title: `${shortTopic} - The Complete Breakdown`,
-      description: `Everything you need to know about ${shortTopic}. In this video, I break down the key concepts, share my personal experience, and give you actionable tips you can use today.`,
-      tags: [keyWord.toLowerCase(), shortTopic.toLowerCase(), 'explained', 'breakdown', 'guide', 'tips', '2024'],
-      hookType: 'how-to',
-      tone: 'informative',
-      thumbnailIdea: `Clean text overlay "${shortTopic}" with your face showing curiosity`,
-      performanceScore: 68 + Math.floor(Math.random() * 15),
-      tasteScore: 55 + Math.floor(Math.random() * 20),
-      reasoning: 'Educational content with clear value proposition'
+      title: `${shortTopic}: the move no one is making`,
+      description: `A ${styleLine || 'sharp'} breakdown of ${shortTopic}. No fluff—just the precise angle and what to do next.`,
+      tags: [keyWord.toLowerCase(), shortTopic.toLowerCase(), 'strategy', 'playbook', '2024'],
+      hookType: hooks[0] || 'bold-claim',
+      tone: tones[0] || 'decisive',
+      thumbnailIdea: `Brutalist text "${shortTopic}" with a single glyph mark${glyph ? ' ' + glyph : ''}`,
+      performanceScore: 75 + Math.floor(Math.random() * 12),
+      tasteScore: 70 + Math.floor(Math.random() * 15),
+      reasoning: `${directiveLine}`
     },
     {
-      title: `Why ${shortTopic} Changes Everything`,
-      description: `${shortTopic} is more important than you think. Here's why it matters and how you can take advantage of it before everyone else catches on.`,
-      tags: [keyWord.toLowerCase(), 'why', 'important', 'game changer', 'must know', 'trending'],
-      hookType: 'bold-claim',
-      tone: 'confident',
-      thumbnailIdea: `Surprised/excited expression with arrow pointing to topic visual`,
-      performanceScore: 72 + Math.floor(Math.random() * 13),
-      tasteScore: 50 + Math.floor(Math.random() * 22),
-      reasoning: 'Bold claims create curiosity and urgency'
+      title: `Skip the filler: ${shortTopic} in 90 seconds`,
+      description: `Fast, surgical take on ${shortTopic}. ${styleLine || 'Direct, glyph-driven tone'}.`,
+      tags: [keyWord.toLowerCase(), 'short', 'no fluff', 'guide', 'fast'],
+      hookType: hooks[1] || 'how-to',
+      tone: tones[1] || 'punchy',
+      thumbnailIdea: `Timer icon + bold title; glyph accent`,
+      performanceScore: 72 + Math.floor(Math.random() * 12),
+      tasteScore: 68 + Math.floor(Math.random() * 14),
+      reasoning: 'Tight promise with time constraint'
     },
     {
-      title: `My Honest Take on ${shortTopic}`,
-      description: `I've been thinking a lot about ${shortTopic} lately. Here's my honest opinion, what I've learned, and what I think you should know.`,
-      tags: [keyWord.toLowerCase(), 'honest', 'opinion', 'review', 'thoughts', 'real talk'],
-      hookType: 'story',
-      tone: 'authentic',
-      thumbnailIdea: `Casual, genuine expression with simple text "My Honest Take"`,
-      performanceScore: 65 + Math.floor(Math.random() * 18),
-      tasteScore: 62 + Math.floor(Math.random() * 18),
-      reasoning: 'Authenticity builds trust and connection'
+      title: `${shortTopic} — what actually works`,
+      description: `Filtered through ${styleLine || 'your archetype voice'}, here are the moves that aren’t obvious but land.`,
+      tags: [keyWord.toLowerCase(), 'what works', 'advanced', 'playbook'],
+      hookType: hooks[2] || 'story',
+      tone: tones[2] || 'authoritative',
+      thumbnailIdea: `Before/after split with stark contrast`,
+      performanceScore: 70 + Math.floor(Math.random() * 12),
+      tasteScore: 69 + Math.floor(Math.random() * 12),
+      reasoning: directiveLine
     },
     {
-      title: `${shortTopic}: What Nobody Tells You`,
-      description: `There's a side to ${shortTopic} that most people miss. In this video, I reveal the hidden truths and share insights that could change your perspective.`,
-      tags: [keyWord.toLowerCase(), 'secrets', 'hidden', 'truth', 'revealed', 'insider'],
-      hookType: 'curiosity-gap',
-      tone: 'mysterious',
-      thumbnailIdea: `Finger over lips "shh" gesture with blurred background text`,
-      performanceScore: 70 + Math.floor(Math.random() * 15),
-      tasteScore: 48 + Math.floor(Math.random() * 25),
-      reasoning: 'Curiosity gaps drive high click-through rates'
-    },
-    {
-      title: `Stop Making These ${shortTopic} Mistakes`,
-      description: `Are you making these common mistakes with ${shortTopic}? I was too. Here's what I learned and how to avoid the pitfalls that trip up most people.`,
-      tags: [keyWord.toLowerCase(), 'mistakes', 'avoid', 'tips', 'common errors', 'fix'],
-      hookType: 'controversy',
-      tone: 'direct',
-      thumbnailIdea: `Concerned expression with red X marks and "STOP" text`,
-      performanceScore: 67 + Math.floor(Math.random() * 16),
-      tasteScore: 52 + Math.floor(Math.random() * 20),
-      reasoning: 'Problem-solving content has high save rates'
-    },
+      title: `${shortTopic}: the ruthless checklist`,
+      description: `A concise checklist for ${shortTopic}. ${styleLine || 'Brutalist, no-adjective tone'}.`,
+      tags: [keyWord.toLowerCase(), 'checklist', 'ruthless', 'lean'],
+      hookType: 'list',
+      tone: 'clinical',
+      thumbnailIdea: `Checklist motif with one glyph mark highlighted`,
+      performanceScore: 71 + Math.floor(Math.random() * 10),
+      tasteScore: 70 + Math.floor(Math.random() * 10),
+      reasoning: 'Checklist format with decisive tone'
+    }
   ];
 
   return variants.slice(0, count);

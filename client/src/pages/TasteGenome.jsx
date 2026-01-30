@@ -23,6 +23,7 @@ import {
   Heart,
   Hexagon,
   Aperture,
+  Activity,
 } from 'lucide-react';
 
 // Map archetype designations to icons

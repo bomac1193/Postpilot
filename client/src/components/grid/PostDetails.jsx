@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../../stores/useAppStore';
 import { useNavigate } from 'react-router-dom';
-import { aiApi, postingApi, intelligenceApi } from '../../lib/api';
+import { aiApi, postingApi, intelligenceApi, contentApi } from '../../lib/api';
 import {
   Image,
   Type,
@@ -163,6 +163,12 @@ function PostDetails({ post }) {
   const [bestTimes, setBestTimes] = useState(null);
   const [loadingBestTimes, setLoadingBestTimes] = useState(false);
 
+  // Reset local editable state when the selected post changes
+  useEffect(() => {
+    setCaption(post?.caption || '');
+    setHashtags(post?.hashtags?.join(' ') || '');
+  }, [post?.id, post?._id]);
+
   // Track shift key for free movement
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -269,11 +275,19 @@ function PostDetails({ post }) {
     setCaption(value);
   };
 
-  // Save to store only on blur to prevent re-render issues
-  const handleCaptionBlur = () => {
-    if (postId) {
-      updatePost(postId, { caption });
+  // Persist to store + backend on blur
+  const persistPost = async (payload) => {
+    if (!postId) return;
+    updatePost(postId, payload);
+    try {
+      await contentApi.update(postId, payload);
+    } catch (err) {
+      console.error('Failed to persist post update:', err);
     }
+  };
+
+  const handleCaptionBlur = () => {
+    persistPost({ caption });
   };
 
   const handleHashtagsChange = (value) => {
@@ -286,9 +300,7 @@ function PostDetails({ post }) {
       .split(/[\s,#]+/)
       .filter((tag) => tag.length > 0)
       .map((tag) => (tag.startsWith('#') ? tag : `#${tag}`));
-    if (postId) {
-      updatePost(postId, { hashtags: tags });
-    }
+    persistPost({ hashtags: tags });
   };
 
   // Generate caption with AI - completely replaces existing caption
@@ -300,9 +312,7 @@ function PostDetails({ post }) {
       if (captions && captions.length > 0) {
         const newCaption = captions[0];
         setCaption(newCaption);
-        if (postId) {
-          updatePost(postId, { caption: newCaption });
-        }
+        persistPost({ caption: newCaption });
       }
     } catch (error) {
       console.error('Failed to generate caption:', error);
@@ -319,9 +329,7 @@ function PostDetails({ post }) {
       ];
       const newCaption = fallbackCaptions[Math.floor(Math.random() * fallbackCaptions.length)];
       setCaption(newCaption);
-      if (postId) {
-        updatePost(postId, { caption: newCaption });
-      }
+      persistPost({ caption: newCaption });
     } finally {
       setGeneratingCaption(false);
     }
@@ -370,9 +378,7 @@ function PostDetails({ post }) {
       if (pick) {
         const newCaption = pick.caption || pick.variant || pick.title || caption;
         setCaption(newCaption);
-        if (postId) {
-          updatePost(postId, { caption: newCaption });
-        }
+        persistPost({ caption: newCaption });
       }
     } catch (error) {
       console.error('Taste-aligned generation failed:', error);
@@ -389,7 +395,7 @@ function PostDetails({ post }) {
       if (suggestedTags && suggestedTags.length > 0) {
         const newHashtags = suggestedTags.join(' ');
         setHashtags(newHashtags);
-        updatePost(post.id, { hashtags: suggestedTags });
+        persistPost({ hashtags: suggestedTags });
       }
     } catch (error) {
       console.error('Failed to suggest hashtags:', error);
@@ -398,7 +404,7 @@ function PostDetails({ post }) {
       const selectedTags = fallbackTags.slice(0, 5 + Math.floor(Math.random() * 5));
       const newHashtags = selectedTags.join(' ');
       setHashtags(newHashtags);
-      updatePost(post.id, { hashtags: selectedTags });
+      persistPost({ hashtags: selectedTags });
     } finally {
       setGeneratingHashtags(false);
     }

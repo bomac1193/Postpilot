@@ -250,12 +250,9 @@ function PostDetails({ post }) {
     }
   }, [isQuickEditing, isRepositionMode, editedImage]);
 
-  // Auto-enable reposition on Instagram tab
+  // Reset reposition mode when leaving Instagram tab
   useEffect(() => {
-    if (activeTab === 'instagram') {
-      setIsRepositionMode(true);
-      initRepositionState();
-    } else {
+    if (activeTab !== 'instagram') {
       setIsRepositionMode(false);
     }
   }, [activeTab]);
@@ -946,7 +943,7 @@ function PostDetails({ post }) {
       // Exit quick edit mode
       setIsQuickEditing(false);
       setEditedImage(null);
-      // Keep reposition mode active for inline IG adjustments
+      setIsRepositionMode(false);
 
       console.log('Quick edit saved successfully');
     } catch (error) {
@@ -961,11 +958,11 @@ function PostDetails({ post }) {
   const InstagramPreview = () => (
     <div className="bg-black rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 overflow-hidden">
-            {userAvatar ? (
-              <img src={userAvatar} alt="" className="w-full h-full object-cover" />
+        <div className="flex items-center justify-between p-3 border-b border-gray-800">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 overflow-hidden">
+              {userAvatar ? (
+                <img src={userAvatar} alt="" className="w-full h-full object-cover" />
             ) : null}
           </div>
           <div>
@@ -978,34 +975,47 @@ function PostDetails({ post }) {
 
       {/* Image / Reposition */}
       <div className="aspect-square bg-gray-900 relative">
-        <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between text-xs text-white">
-          <span className="px-2 py-1 rounded bg-black/50 border border-white/15">Drag to reposition (IG square)</span>
-          <div className="flex gap-2">
-            <button
-              className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
-              onClick={() => setCropBox({ x: 0, y: 0, width: 100, height: 100 })}
-            >
-              Reset
-            </button>
-            <button
-              className="px-2 py-1 bg-accent-purple text-white rounded text-[11px]"
-              onClick={saveQuickEdit}
-              disabled={saving}
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+        {!isRepositionMode && (
+          <button
+            className="absolute top-2 right-2 z-10 px-3 py-1.5 rounded-md bg-white/15 text-white text-xs border border-white/25 hover:bg-white/25 transition-colors"
+            onClick={() => {
+              initRepositionState();
+              setIsRepositionMode(true);
+            }}
+          >
+            Reposition
+          </button>
+        )}
+        {isRepositionMode && (
+          <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between text-xs text-white">
+            <span className="px-2 py-1 rounded bg-black/50 border border-white/15">Drag to reposition (IG square)</span>
+            <div className="flex gap-2">
+              <button
+                className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
+                onClick={() => setCropBox({ x: 0, y: 0, width: 100, height: 100 })}
+              >
+                Reset
+              </button>
+              <button
+                className="px-2 py-1 bg-accent-purple text-white rounded text-[11px]"
+                onClick={saveQuickEdit}
+                disabled={saving}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         <div
           ref={previewContainerRef}
           className="relative w-full h-full bg-black overflow-hidden select-none"
           onMouseMove={(e) => {
-            if (isDragging) handleCropBoxDragMove(e);
+            if (isRepositionMode && isDragging) handleCropBoxDragMove(e);
           }}
           onMouseUp={() => setIsDragging(false)}
           onMouseLeave={() => setIsDragging(false)}
           onTouchMove={(e) => {
-            if (isDragging) handleCropBoxDragMove(e);
+            if (isRepositionMode && isDragging) handleCropBoxDragMove(e);
           }}
           onTouchEnd={() => setIsDragging(false)}
         >
@@ -1019,50 +1029,52 @@ function PostDetails({ post }) {
                 draggable={false}
                 onDragStart={(e) => e.preventDefault()}
               />
-              <div
-                className="absolute pointer-events-none"
-                style={{
-                  left: imageBounds.x,
-                  top: imageBounds.y,
-                  width: imageBounds.width,
-                  height: imageBounds.height,
-                }}
-              >
-                {/* Darkened overlay outside crop area */}
+              {isRepositionMode && (
                 <div
-                  className="absolute inset-0 pointer-events-none"
+                  className="absolute pointer-events-none"
                   style={{
-                    background: `linear-gradient(to right,
-                      rgba(0,0,0,0.7) ${cropBox.x}%,
-                      transparent ${cropBox.x}%,
-                      transparent ${cropBox.x + cropBox.width}%,
-                      rgba(0,0,0,0.7) ${cropBox.x + cropBox.width}%)`
+                    left: imageBounds.x,
+                    top: imageBounds.y,
+                    width: imageBounds.width,
+                    height: imageBounds.height,
                   }}
-                />
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    background: `linear-gradient(to bottom,
-                      rgba(0,0,0,0.7) ${cropBox.y}%,
-                      transparent ${cropBox.y}%,
-                      transparent ${cropBox.y + cropBox.height}%,
-                      rgba(0,0,0,0.7) ${cropBox.y + cropBox.height}%)`
-                  }}
-                />
+                >
+                  {/* Darkened overlay outside crop area */}
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: `linear-gradient(to right,
+                        rgba(0,0,0,0.7) ${cropBox.x}%,
+                        transparent ${cropBox.x}%,
+                        transparent ${cropBox.x + cropBox.width}%,
+                        rgba(0,0,0,0.7) ${cropBox.x + cropBox.width}%)`
+                    }}
+                  />
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                      background: `linear-gradient(to bottom,
+                        rgba(0,0,0,0.7) ${cropBox.y}%,
+                        transparent ${cropBox.y}%,
+                        transparent ${cropBox.y + cropBox.height}%,
+                        rgba(0,0,0,0.7) ${cropBox.y + cropBox.height}%)`
+                    }}
+                  />
 
-                {/* Crop box */}
-                <div
-                  className="absolute border-2 border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] cursor-move"
-                  style={{
-                    left: `${cropBox.x}%`,
-                    top: `${cropBox.y}%`,
-                    width: `${cropBox.width}%`,
-                    height: `${cropBox.height}%`,
-                  }}
-                  onMouseDown={handleCropBoxDragStart}
-                  onTouchStart={handleCropBoxDragStart}
-                />
-              </div>
+                  {/* Crop box */}
+                  <div
+                    className="absolute border-2 border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] cursor-move"
+                    style={{
+                      left: `${cropBox.x}%`,
+                      top: `${cropBox.y}%`,
+                      width: `${cropBox.width}%`,
+                      height: `${cropBox.height}%`,
+                    }}
+                    onMouseDown={handleCropBoxDragStart}
+                    onTouchStart={handleCropBoxDragStart}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gray-900">

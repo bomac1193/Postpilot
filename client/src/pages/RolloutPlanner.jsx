@@ -244,6 +244,7 @@ function RolloutPlanner() {
   const [pickerSectionId, setPickerSectionId] = useState(null);
   const [draggedSectionIndex, setDraggedSectionIndex] = useState(null);
   const [activeTab, setActiveTab] = useState('schedule'); // 'schedule' | 'templates'
+  const [archetype, setArchetype] = useState(null);
 
   // Backend grids (IG/TikTok)
   const [grids, setGrids] = useState([]);
@@ -305,7 +306,19 @@ function RolloutPlanner() {
     fetchGrids();
     fetchReelCollections();
     fetchRollouts();
+    loadArchetype();
   }, [fetchGrids, fetchReelCollections, fetchRollouts]);
+
+  const loadArchetype = async () => {
+    try {
+      const res = await genomeApi.get(currentProfileId || null);
+      if (res?.genome?.archetype?.primary) {
+        setArchetype(res.genome.archetype.primary);
+      }
+    } catch (err) {
+      console.error('Failed to load archetype for rollout recommendation:', err);
+    }
+  };
 
   // Combine all collections from all platforms
   const allCollections = [
@@ -787,6 +800,23 @@ function RolloutPlanner() {
             <h2 className="text-lg font-semibold text-white">Rollout Templates</h2>
             <span className="text-xs text-dark-500">Core blueprints + inspired overlays</span>
           </div>
+          {archetype && (
+            <div className="p-3 border border-accent-purple/30 bg-accent-purple/5 rounded-lg text-sm text-white flex items-center justify-between">
+              <div>
+                <p className="text-xs text-dark-300 uppercase tracking-[0.16em]">Recommended for {archetype.designation}</p>
+                <p className="font-semibold">Try “{archetype.designation === 'R-10' ? 'Inspired: Charli Velocity' : 'Core Product Blueprint'}” to match your glyph cadence.</p>
+              </div>
+              <button
+                onClick={() => {
+                  const tpl = ROLLOUT_TEMPLATES.find(t => t.name === (archetype.designation === 'R-10' ? 'Inspired: Charli Velocity' : 'Core Product Blueprint'));
+                  if (tpl) handleApplyTemplate(tpl);
+                }}
+                className="px-3 py-1.5 rounded-md bg-accent-purple text-white text-xs hover:bg-accent-purple/80"
+              >
+                Apply recommended
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {ROLLOUT_TEMPLATES.map((tpl) => (
               <div key={tpl.id} className="border border-dark-700 bg-dark-900 rounded-lg p-4 flex flex-col gap-2">

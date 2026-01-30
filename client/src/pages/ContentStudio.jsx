@@ -295,6 +295,12 @@ function ContentStudio() {
   const [folioCollectionsList, setFolioCollectionsList] = useState([]);
   const [folioLoadingCollections, setFolioLoadingCollections] = useState(false);
   const [collectionFilter, setCollectionFilter] = useState('all');
+  const tasteContext = tasteProfile ? {
+    glyph: tasteProfile?.glyph,
+    tones: tasteProfile?.aestheticPatterns?.dominantTones,
+    hooks: tasteProfile?.performancePatterns?.hooks,
+    confidence: tasteProfile?.confidence,
+  } : undefined;
   const currentProfileId = useAppStore((state) => state.currentProfileId);
   const activeFolioId = useAppStore((state) => state.activeFolioId);
   const activeProjectId = useAppStore((state) => state.activeProjectId);
@@ -465,6 +471,12 @@ function ContentStudio() {
           profileId: currentProfileId || undefined,
           folioId: activeFolioId || undefined,
           projectId: activeProjectId || undefined,
+          tasteContext,
+          directives: [
+            'Avoid generic intros',
+            'Keep on-brand tone and lexicon',
+            'Use high-signal hooks from profile',
+          ],
         });
       }
       setVariants(result.variants || []);
@@ -517,22 +529,24 @@ function ContentStudio() {
         <p className="text-dark-400 mt-1">
           Folio-native console for generation, scoring, and profile signals.
         </p>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Folio session</p>
-            <p className="text-sm text-white font-semibold mt-1">
-              {folioConnected ? `Connected as ${folioUser?.email || 'user'}` : 'Not connected'}
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Folio session</p>
+          <p className="text-sm text-white font-semibold mt-1">
+            {folioConnected ? `Connected as ${folioUser?.email || 'user'}` : 'Not connected'}
             </p>
           </div>
-          <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Confidence</p>
-            <p className="text-sm text-white font-semibold mt-1">
-              {folioProfileStats?.confidence ? `${folioProfileStats.confidence}%` : '—'}
-            </p>
-          </div>
-          <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Collections</p>
-            <p className="text-sm text-white font-semibold mt-1">
+        <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Confidence</p>
+          <p className="text-sm text-white font-semibold mt-1">
+            {tasteProfile?.confidence
+              ? `${Math.round((tasteProfile.confidence || 0) * 100)}%`
+              : (folioProfileStats?.confidence ? `${folioProfileStats.confidence}%` : '—')}
+          </p>
+        </div>
+        <div className="rounded-lg border border-dark-700 bg-dark-900 p-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-dark-500">Collections</p>
+          <p className="text-sm text-white font-semibold mt-1">
               {folioCollectionsList?.length ?? 0} saved sets
             </p>
           </div>

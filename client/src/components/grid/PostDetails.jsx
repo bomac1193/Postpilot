@@ -250,6 +250,16 @@ function PostDetails({ post }) {
     }
   }, [isQuickEditing, isRepositionMode, editedImage]);
 
+  // Auto-enable reposition on Instagram tab
+  useEffect(() => {
+    if (activeTab === 'instagram') {
+      setIsRepositionMode(true);
+      initRepositionState();
+    } else {
+      setIsRepositionMode(false);
+    }
+  }, [activeTab]);
+
   if (!post) {
     return (
       <div className="h-full bg-dark-800 rounded-2xl border border-dark-700 p-6 flex flex-col items-center justify-center text-center">
@@ -512,12 +522,39 @@ function PostDetails({ post }) {
     setIsQuickEditing(true);
   };
 
-  const startReposition = () => {
-    // Initialise quick edit state without switching tabs
-    startQuickEdit();
-    setIsRepositionMode(true);
-    // Enforce square crop for Instagram preview
-    updateCropAspect('1:1');
+  const initRepositionState = () => {
+    const sourceImage = post.originalImage || post.image;
+    setOriginalImage(sourceImage);
+    setEditedImage(sourceImage);
+
+    const savedSettings = post.editSettings;
+    if (savedSettings) {
+      setEditSettings({
+        scale: savedSettings.scale || 100,
+        rotation: savedSettings.rotation || 0,
+        flipH: savedSettings.flipH || false,
+        flipV: savedSettings.flipV || false,
+        brightness: savedSettings.brightness || 100,
+        contrast: savedSettings.contrast || 100,
+        cropAspect: savedSettings.cropAspect || '1:1',
+      });
+      if (savedSettings.cropBox) {
+        setCropBox(savedSettings.cropBox);
+      } else {
+        setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+      }
+    } else {
+      setEditSettings({
+        scale: 100,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        brightness: 100,
+        contrast: 100,
+        cropAspect: '1:1',
+      });
+      setCropBox({ x: 0, y: 0, width: 100, height: 100 });
+    }
   };
 
   const cancelQuickEdit = () => {
@@ -793,6 +830,9 @@ function PostDetails({ post }) {
       // Auto-save edits before switching tabs
       await saveQuickEdit();
     }
+    if (tabId !== 'instagram') {
+      setIsRepositionMode(false);
+    }
     setActiveTab(tabId);
   };
 
@@ -906,7 +946,7 @@ function PostDetails({ post }) {
       // Exit quick edit mode
       setIsQuickEditing(false);
       setEditedImage(null);
-      setIsRepositionMode(false);
+      // Keep reposition mode active for inline IG adjustments
 
       console.log('Quick edit saved successfully');
     } catch (error) {
@@ -938,124 +978,98 @@ function PostDetails({ post }) {
 
       {/* Image / Reposition */}
       <div className="aspect-square bg-gray-900 relative">
-        {isRepositionMode ? (
-          <div className="w-full h-full p-3">
-            <div className="flex items-center justify-between text-xs text-dark-300 mb-2">
-              <span>Drag to reposition (IG square)</span>
-              <div className="flex gap-2">
-                <button
-                  className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
-                  onClick={() => setCropBox({ x: 0, y: 0, width: 100, height: 100 })}
-                >
-                  Reset
-                </button>
-                <button
-                  className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
-                  onClick={cancelQuickEdit}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-2 py-1 bg-accent-purple text-white rounded text-[11px]"
-                  onClick={saveQuickEdit}
-                  disabled={saving}
-                >
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </div>
-            <div
-              ref={previewContainerRef}
-              className="relative w-full h-full bg-black rounded-lg overflow-hidden select-none"
-              onMouseMove={(e) => {
-                if (isDragging) handleCropBoxDragMove(e);
-              }}
-              onMouseUp={() => setIsDragging(false)}
-              onMouseLeave={() => setIsDragging(false)}
-              onTouchMove={(e) => {
-                if (isDragging) handleCropBoxDragMove(e);
-              }}
-              onTouchEnd={() => setIsDragging(false)}
-            >
-              {(editedImage || post.originalImage || post.image) ? (
-                <>
-                  <img
-                    ref={imageRef}
-                    src={editedImage || post.originalImage || post.image}
-                    alt="Reposition preview"
-                    className="w-full h-full object-contain select-none"
-                    draggable={false}
-                    onDragStart={(e) => e.preventDefault()}
-                  />
-                  <div
-                    className="absolute pointer-events-none"
-                    style={{
-                      left: imageBounds.x,
-                      top: imageBounds.y,
-                      width: imageBounds.width,
-                      height: imageBounds.height,
-                    }}
-                  >
-                    {/* Darkened overlay outside crop area */}
-                    <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{
-                        background: `linear-gradient(to right,
-                          rgba(0,0,0,0.7) ${cropBox.x}%,
-                          transparent ${cropBox.x}%,
-                          transparent ${cropBox.x + cropBox.width}%,
-                          rgba(0,0,0,0.7) ${cropBox.x + cropBox.width}%)`
-                      }}
-                    />
-                    <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{
-                        background: `linear-gradient(to bottom,
-                          rgba(0,0,0,0.7) ${cropBox.y}%,
-                          transparent ${cropBox.y}%,
-                          transparent ${cropBox.y + cropBox.height}%,
-                          rgba(0,0,0,0.7) ${cropBox.y + cropBox.height}%)`
-                      }}
-                    />
-
-                    {/* Crop box */}
-                    <div
-                      className="absolute border-2 border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
-                      style={{
-                        left: `${cropBox.x}%`,
-                        top: `${cropBox.y}%`,
-                        width: `${cropBox.width}%`,
-                        height: `${cropBox.height}%`,
-                      }}
-                      onMouseDown={handleCropBoxDragStart}
-                      onTouchStart={handleCropBoxDragStart}
-                    />
-                  </div>
-                </>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                  <Image className="w-10 h-10 text-gray-600" />
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <>
-            {post.image ? (
-              <img src={post.image} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: post.color || '#1f1f1f' }}>
-                <Image className="w-12 h-12 text-gray-600" />
-              </div>
-            )}
+        <div className="absolute top-2 left-2 right-2 z-10 flex items-center justify-between text-xs text-white">
+          <span className="px-2 py-1 rounded bg-black/50 border border-white/15">Drag to reposition (IG square)</span>
+          <div className="flex gap-2">
             <button
-              onClick={startReposition}
-              className="absolute top-2 right-2 px-3 py-1.5 rounded-md bg-white/15 text-white text-xs border border-white/25 hover:bg-white/25 transition-colors"
+              className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
+              onClick={() => setCropBox({ x: 0, y: 0, width: 100, height: 100 })}
             >
-              Reposition
+              Reset
             </button>
-          </>
-        )}
+            <button
+              className="px-2 py-1 bg-accent-purple text-white rounded text-[11px]"
+              onClick={saveQuickEdit}
+              disabled={saving}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+        <div
+          ref={previewContainerRef}
+          className="relative w-full h-full bg-black overflow-hidden select-none"
+          onMouseMove={(e) => {
+            if (isDragging) handleCropBoxDragMove(e);
+          }}
+          onMouseUp={() => setIsDragging(false)}
+          onMouseLeave={() => setIsDragging(false)}
+          onTouchMove={(e) => {
+            if (isDragging) handleCropBoxDragMove(e);
+          }}
+          onTouchEnd={() => setIsDragging(false)}
+        >
+          {(editedImage || post.originalImage || post.image) ? (
+            <>
+              <img
+                ref={imageRef}
+                src={editedImage || post.originalImage || post.image}
+                alt="Reposition preview"
+                className="w-full h-full object-contain select-none"
+                draggable={false}
+                onDragStart={(e) => e.preventDefault()}
+              />
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  left: imageBounds.x,
+                  top: imageBounds.y,
+                  width: imageBounds.width,
+                  height: imageBounds.height,
+                }}
+              >
+                {/* Darkened overlay outside crop area */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: `linear-gradient(to right,
+                      rgba(0,0,0,0.7) ${cropBox.x}%,
+                      transparent ${cropBox.x}%,
+                      transparent ${cropBox.x + cropBox.width}%,
+                      rgba(0,0,0,0.7) ${cropBox.x + cropBox.width}%)`
+                  }}
+                />
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: `linear-gradient(to bottom,
+                      rgba(0,0,0,0.7) ${cropBox.y}%,
+                      transparent ${cropBox.y}%,
+                      transparent ${cropBox.y + cropBox.height}%,
+                      rgba(0,0,0,0.7) ${cropBox.y + cropBox.height}%)`
+                  }}
+                />
+
+                {/* Crop box */}
+                <div
+                  className="absolute border-2 border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.6)] cursor-move"
+                  style={{
+                    left: `${cropBox.x}%`,
+                    top: `${cropBox.y}%`,
+                    width: `${cropBox.width}%`,
+                    height: `${cropBox.height}%`,
+                  }}
+                  onMouseDown={handleCropBoxDragStart}
+                  onTouchStart={handleCropBoxDragStart}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gray-900">
+              <Image className="w-10 h-10 text-gray-600" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Actions */}

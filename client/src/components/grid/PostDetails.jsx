@@ -237,7 +237,7 @@ function PostDetails({ post }) {
 
   // Recalculate bounds when image loads or quick edit opens
   useEffect(() => {
-    if (isQuickEditing && imageRef.current) {
+    if ((isQuickEditing || isRepositionMode) && imageRef.current) {
       const img = imageRef.current;
       if (img.complete) {
         calculateImageBounds();
@@ -248,7 +248,7 @@ function PostDetails({ post }) {
       window.addEventListener('resize', calculateImageBounds);
       return () => window.removeEventListener('resize', calculateImageBounds);
     }
-  }, [isQuickEditing, editedImage]);
+  }, [isQuickEditing, isRepositionMode, editedImage]);
 
   if (!post) {
     return (
@@ -513,6 +513,7 @@ function PostDetails({ post }) {
   };
 
   const startReposition = () => {
+    // Initialise quick edit state without switching tabs
     startQuickEdit();
     setIsRepositionMode(true);
     // Enforce square crop for Instagram preview
@@ -935,55 +936,168 @@ function PostDetails({ post }) {
         <MoreHorizontal className="w-5 h-5 text-white" />
       </div>
 
-      {/* Image */}
-      <div className="aspect-square bg-gray-900">
-        {post.image ? (
-          <img src={post.image} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: post.color || '#1f1f1f' }}>
-            <Image className="w-12 h-12 text-gray-600" />
+      {/* Image / Reposition */}
+      <div className="aspect-square bg-gray-900 relative">
+        {isRepositionMode ? (
+          <div className="w-full h-full p-3">
+            <div className="flex items-center justify-between text-xs text-dark-300 mb-2">
+              <span>Drag to reposition (IG square)</span>
+              <div className="flex gap-2">
+                <button
+                  className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
+                  onClick={() => setCropBox({ x: 0, y: 0, width: 100, height: 100 })}
+                >
+                  Reset
+                </button>
+                <button
+                  className="px-2 py-1 bg-white/10 text-white rounded border border-white/20 text-[11px]"
+                  onClick={cancelQuickEdit}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-2 py-1 bg-accent-purple text-white rounded text-[11px]"
+                  onClick={saveQuickEdit}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+            <div
+              ref={previewContainerRef}
+              className="relative w-full h-full bg-black rounded-lg overflow-hidden select-none"
+              onMouseMove={(e) => {
+                if (isDragging) handleCropBoxDragMove(e);
+              }}
+              onMouseUp={() => setIsDragging(false)}
+              onMouseLeave={() => setIsDragging(false)}
+              onTouchMove={(e) => {
+                if (isDragging) handleCropBoxDragMove(e);
+              }}
+              onTouchEnd={() => setIsDragging(false)}
+            >
+              {(editedImage || post.originalImage || post.image) ? (
+                <>
+                  <img
+                    ref={imageRef}
+                    src={editedImage || post.originalImage || post.image}
+                    alt="Reposition preview"
+                    className="w-full h-full object-contain select-none"
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                  />
+                  <div
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: imageBounds.x,
+                      top: imageBounds.y,
+                      width: imageBounds.width,
+                      height: imageBounds.height,
+                    }}
+                  >
+                    {/* Darkened overlay outside crop area */}
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background: `linear-gradient(to right,
+                          rgba(0,0,0,0.7) ${cropBox.x}%,
+                          transparent ${cropBox.x}%,
+                          transparent ${cropBox.x + cropBox.width}%,
+                          rgba(0,0,0,0.7) ${cropBox.x + cropBox.width}%)`
+                      }}
+                    />
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background: `linear-gradient(to bottom,
+                          rgba(0,0,0,0.7) ${cropBox.y}%,
+                          transparent ${cropBox.y}%,
+                          transparent ${cropBox.y + cropBox.height}%,
+                          rgba(0,0,0,0.7) ${cropBox.y + cropBox.height}%)`
+                      }}
+                    />
+
+                    {/* Crop box */}
+                    <div
+                      className="absolute border-2 border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
+                      style={{
+                        left: `${cropBox.x}%`,
+                        top: `${cropBox.y}%`,
+                        width: `${cropBox.width}%`,
+                        height: `${cropBox.height}%`,
+                      }}
+                      onMouseDown={handleCropBoxDragStart}
+                      onTouchStart={handleCropBoxDragStart}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                  <Image className="w-10 h-10 text-gray-600" />
+                </div>
+              )}
+            </div>
           </div>
+        ) : (
+          <>
+            {post.image ? (
+              <img src={post.image} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: post.color || '#1f1f1f' }}>
+                <Image className="w-12 h-12 text-gray-600" />
+              </div>
+            )}
+            <button
+              onClick={startReposition}
+              className="absolute top-2 right-2 px-3 py-1.5 rounded-md bg-white/15 text-white text-xs border border-white/25 hover:bg-white/25 transition-colors"
+            >
+              Reposition
+            </button>
+          </>
         )}
       </div>
 
       {/* Actions */}
-      <div className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-4">
-            <Heart className="w-6 h-6 text-white cursor-pointer hover:text-red-500 transition-colors" fill="none" />
-            <MessageCircle className="w-6 h-6 text-white cursor-pointer" />
-            <Share2 className="w-6 h-6 text-white cursor-pointer" />
+      {!isRepositionMode && (
+        <div className="p-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-4">
+              <Heart className="w-6 h-6 text-white cursor-pointer hover:text-red-500 transition-colors" fill="none" />
+              <MessageCircle className="w-6 h-6 text-white cursor-pointer" />
+              <Share2 className="w-6 h-6 text-white cursor-pointer" />
+            </div>
+            <Bookmark className="w-6 h-6 text-white cursor-pointer" />
           </div>
-          <Bookmark className="w-6 h-6 text-white cursor-pointer" />
+
+          {/* Likes */}
+          <p className="text-white text-sm font-semibold mb-1">
+            {formatNumber(engagement.likes)} likes
+          </p>
+
+          {/* Caption */}
+          <p className="text-white text-sm">
+            <span className="font-semibold">{username}</span>{' '}
+            <span className="text-gray-300">{caption || 'Your caption will appear here...'}</span>
+          </p>
+
+          {/* Comments */}
+          <p className="text-gray-400 text-sm mt-2 cursor-pointer">
+            View all {engagement.comments} comments
+          </p>
+
+          <div className="mt-2 space-y-1">
+            {FAKE_COMMENTS.instagram.map((comment, i) => (
+              <p key={i} className="text-sm">
+                <span className="text-white font-semibold">{comment.user}</span>{' '}
+                <span className="text-gray-300">{comment.text}</span>
+              </p>
+            ))}
+          </div>
+
+          <p className="text-gray-500 text-xs mt-2 uppercase">2 hours ago</p>
         </div>
-
-        {/* Likes */}
-        <p className="text-white text-sm font-semibold mb-1">
-          {formatNumber(engagement.likes)} likes
-        </p>
-
-        {/* Caption */}
-        <p className="text-white text-sm">
-          <span className="font-semibold">{username}</span>{' '}
-          <span className="text-gray-300">{caption || 'Your caption will appear here...'}</span>
-        </p>
-
-        {/* Comments */}
-        <p className="text-gray-400 text-sm mt-2 cursor-pointer">
-          View all {engagement.comments} comments
-        </p>
-
-        <div className="mt-2 space-y-1">
-          {FAKE_COMMENTS.instagram.map((comment, i) => (
-            <p key={i} className="text-sm">
-              <span className="text-white font-semibold">{comment.user}</span>{' '}
-              <span className="text-gray-300">{comment.text}</span>
-            </p>
-          ))}
-        </div>
-
-        <p className="text-gray-500 text-xs mt-2 uppercase">2 hours ago</p>
-      </div>
+      )}
     </div>
   );
 

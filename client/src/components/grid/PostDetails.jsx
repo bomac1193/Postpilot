@@ -259,20 +259,8 @@ function PostDetails({ post }) {
     }
   }, [isQuickEditing, editedImage]);
 
-  if (!post) {
-    return (
-      <div className="h-full bg-dark-800 rounded-2xl border border-dark-700 p-6 flex flex-col items-center justify-center text-center">
-        <Image className="w-12 h-12 text-dark-500 mb-4" />
-        <p className="text-dark-300 mb-2">No post selected</p>
-        <p className="text-sm text-dark-500">
-          Click on a grid item to view and edit its details
-        </p>
-      </div>
-    );
-  }
-
   // Get the correct post ID (works for both local and MongoDB posts)
-  const postId = post.id || post._id;
+  const postId = post?.id || post?._id || null;
 
   const parseHashtagsText = (value) => (
     String(value || '')
@@ -323,6 +311,18 @@ function PostDetails({ post }) {
     setCaption(post?.caption || '');
     setHashtags(post?.hashtags?.join(' ') || '');
   }, [postId]);
+
+  if (!post) {
+    return (
+      <div className="h-full bg-dark-800 rounded-2xl border border-dark-700 p-6 flex flex-col items-center justify-center text-center">
+        <Image className="w-12 h-12 text-dark-500 mb-4" />
+        <p className="text-dark-300 mb-2">No post selected</p>
+        <p className="text-sm text-dark-500">
+          Click on a grid item to view and edit its details
+        </p>
+      </div>
+    );
+  }
 
   const handleCaptionBlur = () => {
     persistPost({ caption });

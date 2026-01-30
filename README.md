@@ -3,33 +3,37 @@
 One control room for grids, rollouts, and campaigns—powered by a unified Taste Brain (Subtaste) and Folio collections. We optimise for resonance, not just posting volume.
 
 ## Diagnosis (market gap)
-- Schedulers are commoditised; AI outputs are generic and stateless.
-- Rollouts/templates are static; performance rarely feeds back into strategy.
-- Taste signals are siloed (no single brain across grid/YouTube/rollouts).
-- Visual fidelity is weak; previews/crops don’t reflect what actually ships.
+- Siloed taste signals waste ~40% of social budget—IG learnings never hit TikTok, manual A/B takes quarters, and AI is ungoverned at scale.
 
 ## Guiding policy
-- **One Taste Brain:** every signal (ratings, skips, Folio saves, platform dislikes, performance) updates a single genome that conditions all generation, scoring, and rollouts.
-- **Platform-native UX:** grid-first architecture; tuned previews and non-destructive crops for IG/TikTok/YouTube/X.
-- **Rollout automation:** archetype-aware templates auto-filled with taste-aligned AI; A/B and performance feedback close the loop.
-- **Avant AI stack:** multi-model chain (spiky → polish) with taste directives and brand guardrails.
+- **Unified Taste Memory:** every like/save/skip/performance signal mutates one 1193 genome that conditions all generation, scoring, and rollouts.
+- **Platform-native UX:** grid-first architecture; tuned previews and non-destructive crops for IG/TikTok/X; Folio collections as primary taste input.
+- **Rollout automation:** archetype-aware templates auto-filled with taste-aligned AI; A/B and performance feedback close the loop in weeks, not quarters.
+- **Governed avant stack:** multi-model chain (spiky → polish) with lexicon guardrails and on-brand classifiers.
 
-## Strategy (blue-ocean moves)
-- **Collection-driven generation:** Folio saves + taste genome condition titles/hooks/descriptions and rollout copy.
-- **Performance-closing loop:** every post scored vs taste + outcome; future recs adapt automatically; “why it worked” surfaced.
-- **Archetype rollout kits:** templates/styles recommended per glyph; on-brand/off-brand checks before scheduling.
-- **Admin/test harness:** neutral vs profiled modes to stress-test learning and confidence.
-- **Visual fidelity:** accurate platform previews; non-destructive crop/reposition saved to uploads.
+## ERRC (Shippable Q2 2026)
+| Eliminate | Reduce | Raise | Create |
+| --- | --- | --- | --- |
+| Siloed signals (IG→TikTok blind) | A/B cycles: 90→14 days | 2× viral prediction (vs manual baseline) | 1193 Taste Schema (JSON signals+archetypes) |
+| Ungoverned AI (no guardrails) | Per-post prompting → shared taste context | 95% on-brand (brand glossary match) | Designer Vault (Folio→templates) |
+| 30→3 signals (taste + skip + ROAS) | | One-click IG/TikTok playbooks | Conviction Loop (taste→confidence→ROAS) |
+| | | | Taste API (partner moat) |
 
-## ERRC (Eliminate / Reduce / Raise / Create)
-- **Eliminate:** vanity dashboards; siloed signals; ungoverned AI generations.
-- **Reduce:** A/B cycles (90→3 days) via auto high-signal Likert/A/B loops; per-post prompting (use shared taste context); noisy analytics (focus on blended taste+outcome signals).
-- **Raise:** Resonance Velocity (define target, e.g., 4.2x predictive lift vs baseline); governance/trust scores (% on-brand, off-brand intercept, explainability); archetype kits (rollout templates + tone/lexicon guardrails).
-- **Create:** RGP schema (taste signals + directives + outcomes); Phase Genome Marketplace priced on predicted LTV/velocity lift; conviction flywheel (taste training → confidence → resonance → more stans/signals → better generation).
+## Week 1–4 production plan
+- **Week 1:** IG/TikTok auth + Folio capture → 1193 Schema v0 storage.
+- **Week 2:** 1193 Schema v1 + lexicon guardrails + 95% on-brand classifier.
+- **Week 3:** Auto-playbook gen (IG/TikTok templates) + A/B harness.
+- **Week 4:** 3-signal dashboard + 3 DTC betas (ROAS split test).
+
+## Defined metrics (test harness)
+- **2× viral prediction:** top-1 hook selection vs manual over 14 days.
+- **95% on-brand:** brand glossary match + two internal reviewers approval.
+- **2× ROAS:** matched campaign split test (pre/post Slayt).
+- **90→14 day cycles:** signal capture → playbook deploy timestamp.
 
 ## Horizons (defensibility)
-- **1–2 yrs:** Taste Brain across all surfaces; taste-driven rollout automation; avant stack default; performance loop live.
-- **5–10 yrs:** Dynamic playbooks that rewrite/schedule themselves from results; template marketplace with rev-share; team governance/provenance.
+- **1–2 yrs:** Taste Brain across all surfaces; taste-driven rollout automation; performance loop live with governance.
+- **5–10 yrs:** Dynamic playbooks that rewrite/schedule themselves from results; template marketplace with rev-share; team provenance.
 - **10–20 yrs:** Adaptive brand pilot that self-optimises campaigns; collective (privacy-safe) taste graph birthing new subgenres/rollouts.
 
 ## Getting Started
